@@ -5,12 +5,12 @@ const PRESSURE_LEVELS = [
   ["850", 1457], ["800", 1949], ["700", 3012], ["600", 4206], ["500", 5574]
 ];
 const HOURLY_FIELDS = [
-  "wind_speed_10m", "wind_direction_10m", "wind_speed_80m", "wind_direction_80m",
+  "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m", "wind_speed_80m", "wind_direction_80m",
   "wind_speed_120m", "wind_direction_120m", "wind_speed_180m", "wind_direction_180m",
   ...PRESSURE_LEVELS.flatMap(([pressure]) => [`wind_speed_${pressure}hPa`, `wind_direction_${pressure}hPa`])
 ];
 const NAV_COMMANDS = new Set([16, 17, 18, 19, 20, 21, 22, 82, 84, 85, 92, 93]);
-const DEFAULT_CENTER = [37.7749, -122.4194];
+const DEFAULT_CENTER = [-19.0, 46.7];
 
 const elements = {
   analyzeButton: document.getElementById("analyzeButton"),
@@ -40,7 +40,7 @@ const state = {
   selectedWaypoint: null
 };
 
-const map = L.map("map", { zoomControl: false, preferCanvas: true }).setView(DEFAULT_CENTER, 11);
+const map = L.map("map", { zoomControl: false, preferCanvas: true }).setView(DEFAULT_CENTER, 6);
 L.control.zoom({ position: "bottomright" }).addTo(map);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 19,
@@ -199,7 +199,7 @@ function makeWaypoint({ lat, lon, altitude = 100, frame = 3, sequence, command =
   return {
     id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
     lat, lon, altitude, frame, sequence, command, name, altitudeMode,
-    wind: null, forecastTime: null, sampledAltitude: null, altitudeNote: ""
+    wind: null, gust: null, forecastTime: null, sampledAltitude: null, altitudeNote: ""
   };
 }
 
@@ -287,7 +287,10 @@ async function fetchForecastForMission() {
   elements.loadingText.textContent = `Fetching ${state.waypoints.length} altitude-specific forecast${state.waypoints.length === 1 ? "" : "s"}…`;
   elements.analyzeButton.disabled = true;
   setSourceStatus("Fetching Open-Meteo forecast…", "loading");
-  state.waypoints.forEach(waypoint => { waypoint.wind = null; });
+  state.waypoints.forEach(waypoint => {
+    waypoint.wind = null;
+    waypoint.gust = null;
+  });
   renderWaypoints();
   try {
     const batches = [];
@@ -310,6 +313,7 @@ async function fetchForecastForMission() {
       const layers = getWindLayers(forecast.hourly, forecastIndex, forecast.elevation);
       const wind = estimateWind(layers, targetAltitude);
       waypoint.wind = wind;
+      waypoint.gust = forecast.hourly.wind_gusts_10m?.[forecastIndex] ?? null;
       waypoint.forecastTime = forecast.hourly.time[forecastIndex];
       waypoint.targetAltitudeAgl = targetAltitude;
       waypoint.groundElevation = forecast.elevation;
@@ -338,13 +342,14 @@ function waypointNumber(waypoint, index) {
 
 function markerIcon(waypoint, index, selected) {
   const number = waypointNumber(waypoint, index);
+  const gust = Number.isFinite(waypoint.gust) ? `${waypoint.gust.toFixed(1)} m/s` : null;
   const wind = waypoint.wind
-    ? `<div class="map-wind-label" title="Wind ${waypoint.wind.speed.toFixed(1)} m/s from ${Math.round(waypoint.wind.direction)}°"><span class="map-wind-arrow" style="transform:rotate(${(waypoint.wind.direction + 180) % 360}deg)">↑</span><span>${waypoint.wind.speed.toFixed(1)} m/s</span><span class="map-wind-direction">from ${Math.round(waypoint.wind.direction)}°</span></div>`
+    ? `<div class="map-wind-label" title="Wind ${waypoint.wind.speed.toFixed(1)} m/s from ${Math.round(waypoint.wind.direction)}°${gust ? `; 10 m gust ${gust}` : ""}"><span class="map-wind-arrow" style="transform:rotate(${(waypoint.wind.direction + 180) % 360}deg)">↑</span><span>${waypoint.wind.speed.toFixed(1)} m/s</span><span class="map-wind-direction">from ${Math.round(waypoint.wind.direction)}°</span>${gust ? `<span class="map-wind-gust">gust ${gust}</span>` : ""}</div>`
     : "";
   return L.divIcon({
     className: `waypoint-marker${selected ? " selected" : ""}`,
     html: `<div class="map-waypoint-label"><div class="waypoint-marker-inner"><span>${number}</span></div>${wind}</div>`,
-    iconSize: [210, 38],
+    iconSize: [285, 38],
     iconAnchor: [14, 33]
   });
 }
@@ -373,8 +378,9 @@ function renderMap() {
 }
 
 function popupContent(waypoint, index) {
+  const gust = Number.isFinite(waypoint.gust) ? `${waypoint.gust.toFixed(1)} m/s` : "Unavailable";
   const wind = waypoint.wind
-    ? `<div class="popup-wind">${waypoint.wind.speed.toFixed(1)} m/s · wind from ${Math.round(waypoint.wind.direction)}° (${describeWindDirection(waypoint.wind.direction)})</div><div class="popup-detail">Wind altitude: ${waypoint.targetAltitudeAgl.toFixed(0)} m AGL · forecast level ${waypoint.wind.altitude.toFixed(0)} m</div>`
+    ? `<div class="popup-wind">${waypoint.wind.speed.toFixed(1)} m/s · wind from ${Math.round(waypoint.wind.direction)}° (${describeWindDirection(waypoint.wind.direction)})</div><div class="popup-detail">10 m gust: ${gust}</div><div class="popup-detail">Wind altitude: ${waypoint.targetAltitudeAgl.toFixed(0)} m AGL · forecast level ${waypoint.wind.altitude.toFixed(0)} m</div>`
     : '<div class="popup-detail">Wind forecast not loaded</div>';
   return `<div class="popup-title">${escapeHtml(waypoint.name || `Waypoint ${index + 1}`)}</div><div class="popup-detail">${waypoint.lat.toFixed(5)}, ${waypoint.lon.toFixed(5)}</div><div class="popup-detail">Mission altitude: ${waypoint.altitude} m</div>${wind}`;
 }
@@ -406,6 +412,9 @@ function renderWaypoints() {
     const altitudeNote = waypoint.wind && Number.isFinite(waypoint.targetAltitudeAgl)
       ? `<div class="height-note">Wind at ${waypoint.targetAltitudeAgl.toFixed(0)} m AGL · forecast level ${waypoint.wind.altitude.toFixed(0)} m${waypoint.altitudeNote ? ` · ${escapeHtml(waypoint.altitudeNote)}` : ""}</div>`
       : waypoint.altitudeNote ? `<div class="height-note">${escapeHtml(waypoint.altitudeNote)}</div>` : "";
+    const gustMarkup = waypoint.wind
+      ? `<div class="gust-result">10 m gust: ${Number.isFinite(waypoint.gust) ? `${waypoint.gust.toFixed(1)} m/s` : "Unavailable"}</div>`
+      : "";
     return `<article class="waypoint-card${waypoint.id === state.selectedWaypoint ? " selected" : ""}" data-id="${waypoint.id}">
       <div class="waypoint-top">
         <span class="waypoint-badge">${waypointNumber(waypoint, index)}</span>
@@ -415,7 +424,7 @@ function renderWaypoints() {
       <div class="altitude-row">
         <label class="altitude-edit">ALT <input type="number" step="1" value="${escapeHtml(waypoint.altitude)}" data-action="altitude" aria-label="Waypoint ${waypointNumber(waypoint, index)} altitude in meters"> m</label>
         <span class="wind-result${waypoint.wind ? "" : " pending"}">${windMarkup}</span>
-      </div>${altitudeNote}
+      </div>${altitudeNote}${gustMarkup}
     </article>`;
   }).join("");
   renderMap();
@@ -469,7 +478,7 @@ function zoomToMission() {
 
 function exportCsv() {
   const rows = [
-    ["Waypoint", "Latitude", "Longitude", "Mission altitude (m)", "Altitude above ground (m)", "Ground elevation (m)", "Wind speed (m/s)", "Wind direction (degrees from north)", "Wind direction", "Forecast time UTC"],
+    ["Waypoint", "Latitude", "Longitude", "Mission altitude (m)", "Altitude above ground (m)", "Ground elevation (m)", "Wind speed (m/s)", "Wind gust at 10 m (m/s)", "Wind direction (degrees from north)", "Wind direction", "Forecast time UTC"],
     ...state.waypoints.map((point, index) => [
       point.name || `Waypoint ${index + 1}`,
       point.lat.toFixed(6),
@@ -478,6 +487,7 @@ function exportCsv() {
       Number.isFinite(point.targetAltitudeAgl) ? point.targetAltitudeAgl.toFixed(1) : "",
       Number.isFinite(point.groundElevation) ? point.groundElevation.toFixed(1) : "",
       point.wind ? point.wind.speed.toFixed(2) : "",
+      Number.isFinite(point.gust) ? point.gust.toFixed(2) : "",
       point.wind ? Math.round(point.wind.direction) : "",
       point.wind ? describeWindDirection(point.wind.direction) : "",
       point.forecastTime ? `${point.forecastTime.replace("T", " ")} UTC` : ""
@@ -574,6 +584,7 @@ elements.waypointList.addEventListener("change", event => {
   }
   waypoint.altitude = altitude;
   waypoint.wind = null;
+  waypoint.gust = null;
   waypoint.altitudeNote = "";
   cancelForecastRequest();
   renderWaypoints();

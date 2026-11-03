@@ -191,6 +191,7 @@ button { color: inherit; }
 .wind-arrow { display: inline-block; color: #178c70; font-size: 13px; line-height: 1; }
 .wind-result.pending { color: #9ea8b4; font-weight: 500; }
 .height-note { margin-top: 6px; color: #9ba5b2; font-size: 8px; }
+.gust-result { margin-top: 4px; color: #526579; font-size: 9px; font-weight: 700; }
 .waypoint-card.selected { border-color: #85c9b2; box-shadow: 0 0 0 2px #e9f7f1; }
 .sidebar-footer { display: flex; flex-direction: column; gap: 7px; padding: 11px 29px 14px; border-top: 1px solid #f0f2f5; }
 .forecast-source { display: flex; align-items: center; gap: 7px; color: #78869a; font-size: 9px; }
@@ -240,7 +241,7 @@ button { color: inherit; }
 .popup-title { font-weight: 700; color: #34465b; }
 .popup-detail { color: #738197; }
 .popup-wind { color: #168568; font-weight: 700; }
-.waypoint-marker { width: 210px; height: 38px; background: transparent; border: 0; }
+.waypoint-marker { width: 285px; height: 38px; background: transparent; border: 0; }
 .map-waypoint-label { display: flex; width: max-content; height: 36px; align-items: center; gap: 5px; }
 .waypoint-marker-inner { position: relative; display: grid; width: 27px; height: 27px; place-items: center; color: #fff; background: #263a50; border: 2px solid #fff; border-radius: 9px 9px 9px 2px; box-shadow: 0 2px 7px rgb(36 53 60 / 28%); font: 700 10px "DM Sans", sans-serif; transform: rotate(-45deg); }
 .waypoint-marker-inner span { transform: rotate(45deg); }
@@ -248,6 +249,7 @@ button { color: inherit; }
 .map-wind-label { display: flex; min-height: 27px; align-items: center; gap: 5px; padding: 3px 7px; color: #34465b; background: rgb(255 255 255 / 96%); border: 1px solid #dfe9e5; border-radius: 7px; box-shadow: 0 2px 8px rgb(36 53 60 / 16%); font-size: 11px; font-weight: 700; white-space: nowrap; }
 .map-wind-arrow { display: inline-block; color: #14886c; font-size: 15px; line-height: 1; }
 .map-wind-direction { padding-left: 5px; color: #178568; border-left: 1px solid #e4ebe8; font-variant-numeric: tabular-nums; }
+.map-wind-gust { padding-left: 5px; color: #526579; border-left: 1px solid #e4ebe8; }
 .leaflet-control-attribution { font-size: 8px !important; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -392,6 +394,7 @@ button { color: inherit; }
 :root[data-theme="dark"] .waypoint-coords,
 :root[data-theme="dark"] .remove-waypoint,
 :root[data-theme="dark"] .wind-result.pending,
+:root[data-theme="dark"] .gust-result,
 :root[data-theme="dark"] .field-label > span { color: #94a3b6; }
 :root[data-theme="dark"] .waypoint-name,
 :root[data-theme="dark"] .empty-state strong,
@@ -417,7 +420,8 @@ button { color: inherit; }
   background: rgb(25 37 51 / 96%);
   border-color: #405064;
 }
-:root[data-theme="dark"] .map-wind-direction { color: #70d2b4; border-color: #405064; }
+:root[data-theme="dark"] .map-wind-direction,
+:root[data-theme="dark"] .map-wind-gust { color: #70d2b4; border-color: #405064; }
 :root[data-theme="dark"] .leaflet-control-zoom a {
   color: #e0e9f2;
   background: #1c2837;
