@@ -1,0 +1,446 @@
+:root {
+  color-scheme: light;
+  --ink: #17233b;
+  --muted: #78859a;
+  --line: #e9edf2;
+  --green: #1d9a77;
+  --green-dark: #128164;
+  --green-soft: #eaf7f2;
+  --surface: #ffffff;
+  --canvas: #f5f7fa;
+  font-family: "DM Sans", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #e4ebf3;
+  --muted: #9aa8bb;
+  --line: #2b394b;
+  --green: #39b895;
+  --green-dark: #269b7a;
+  --green-soft: #1b382f;
+  --surface: #18222f;
+  --canvas: #111923;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-width: 360px;
+  min-height: 100vh;
+  color: var(--ink);
+  background: var(--canvas);
+}
+
+button, input { font: inherit; }
+button { color: inherit; }
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 390px minmax(0, 1fr);
+  width: 100%;
+  height: 100vh;
+  min-height: 660px;
+  overflow: hidden;
+}
+
+.sidebar {
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface);
+  box-shadow: 5px 0 26px rgb(29 44 66 / 5%);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  height: 77px;
+  flex: 0 0 77px;
+  padding: 0 29px;
+  border-bottom: 1px solid #f0f2f5;
+}
+
+.theme-toggle {
+  display: grid;
+  width: 35px;
+  height: 35px;
+  flex: 0 0 35px;
+  margin-left: auto;
+  place-items: center;
+  color: #78879a;
+  background: #f5f7f9;
+  border: 1px solid #e8edf1;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.theme-toggle:hover { color: var(--green-dark); background: var(--green-soft); }
+.theme-toggle svg { width: 17px; height: 17px; }
+.theme-icon-moon { display: none; }
+:root[data-theme="dark"] .theme-icon-sun { display: none; }
+:root[data-theme="dark"] .theme-icon-moon { display: block; }
+
+.brand-mark {
+  display: grid;
+  width: 37px;
+  height: 37px;
+  place-items: center;
+  color: white;
+  background: var(--green);
+  border-radius: 12px;
+  box-shadow: 0 5px 11px rgb(29 154 119 / 22%);
+}
+
+.brand-mark svg { width: 28px; height: 28px; }
+.brand-name { display: block; font: 800 19px/1 "Manrope", sans-serif; letter-spacing: -.8px; }
+.brand-caption { display: block; margin-top: 5px; color: #8b95a5; font-size: 8px; font-weight: 700; letter-spacing: 1.35px; }
+
+.sidebar-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-color: #dce5e4 transparent;
+  scrollbar-width: thin;
+}
+
+.intro { padding: 25px 29px 20px; }
+.eyebrow { display: flex; align-items: center; gap: 7px; color: #768499; font-size: 9px; font-weight: 700; letter-spacing: 1.15px; }
+.eyebrow-dot { width: 6px; height: 6px; background: #27b78c; border-radius: 50%; box-shadow: 0 0 0 3px #e6f5f0; }
+.intro h1 { margin: 13px 0 8px; font: 700 27px/1.26 "Manrope", sans-serif; letter-spacing: -.95px; }
+.intro h1 span { color: var(--green); }
+.intro p { margin: 0; color: #79869a; font-size: 12px; line-height: 1.6; }
+
+.panel { margin: 0 20px; padding: 17px 17px 15px; background: #fff; border: 1px solid #ebeff3; border-radius: 12px; }
+.mission-panel { margin-bottom: 13px; }
+.section-heading, .waypoints-heading, .section-heading > div, .waypoints-heading > div { display: flex; align-items: center; }
+.section-heading, .waypoints-heading { justify-content: space-between; }
+.section-heading > div, .waypoints-heading > div { gap: 9px; }
+.section-heading h2, .waypoints-heading h2 { margin: 0; font: 700 13px "Manrope", sans-serif; letter-spacing: -.15px; }
+.step-number { color: #9aa5b4; font-size: 9px; font-weight: 700; letter-spacing: .6px; }
+.text-button { padding: 3px 0; color: var(--green-dark); background: transparent; border: 0; font-size: 10px; font-weight: 700; cursor: pointer; }
+.text-button:disabled { color: #b6bec8; cursor: default; }
+
+.upload-zone { display: flex; align-items: center; min-height: 69px; gap: 10px; margin-top: 15px; padding: 10px; background: #fafcfd; border: 1px dashed #d4dfe3; border-radius: 8px; cursor: pointer; transition: background .16s, border-color .16s; }
+.upload-zone:hover, .upload-zone.dragging { background: #f0f9f6; border-color: #61b99f; }
+.upload-zone input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.upload-icon { display: grid; width: 34px; height: 34px; flex: 0 0 34px; place-items: center; color: var(--green); background: var(--green-soft); border-radius: 9px; }
+.upload-icon svg { width: 19px; height: 19px; }
+.upload-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 4px; }
+.upload-copy strong { font-size: 10px; font-weight: 700; }
+.upload-copy > span { color: #8894a4; font-size: 8px; line-height: 1.4; }
+.browse-button { padding: 6px 8px; color: #59677a; background: #fff; border: 1px solid #e8edf0; border-radius: 6px; font-size: 9px; font-weight: 700; }
+.divider { position: relative; margin: 11px 0 9px; color: #a7b0bd; font-size: 8px; text-align: center; }
+.divider::before { position: absolute; top: 50%; left: 0; width: 100%; height: 1px; background: #eff2f5; content: ""; }
+.divider span { position: relative; padding: 0 8px; background: #fff; }
+.manual-hint { display: flex; align-items: center; gap: 7px; color: #7e899a; font-size: 9px; }
+.click-indicator { width: 7px; height: 7px; background: #43b695; border-radius: 50%; box-shadow: 0 0 0 3px #e5f5ef; }
+.message { margin-top: 11px; padding: 9px 10px; color: #466276; background: #f1f7fa; border-radius: 7px; font-size: 10px; line-height: 1.5; }
+.message.error { color: #a13d47; background: #fff1f1; }
+
+.live-pill { display: flex; align-items: center; gap: 5px; padding: 5px 7px; color: #388a72; background: #eff8f4; border-radius: 20px; font-size: 8px; font-weight: 700; letter-spacing: .4px; }
+.live-pill > span { width: 5px; height: 5px; background: #2ab489; border-radius: 50%; box-shadow: 0 0 0 2px #d5f0e5; }
+.field-label { display: flex; justify-content: space-between; margin: 15px 0 7px; color: #6f7d90; font-size: 9px; font-weight: 700; }
+.field-label > span { color: #a3acb8; font-size: 7px; letter-spacing: .7px; }
+.time-field { display: flex; align-items: center; height: 36px; gap: 8px; padding: 0 10px; border: 1px solid #e6ebf0; border-radius: 7px; }
+.time-field svg { width: 15px; height: 15px; flex: 0 0 15px; color: #8794a5; }
+.time-field input { width: 100%; min-width: 0; color: #49576c; background: transparent; border: 0; outline: 0; font-size: 10px; }
+.time-field input::-webkit-calendar-picker-indicator { cursor: pointer; opacity: .65; }
+.primary-button { display: flex; align-items: center; justify-content: center; width: 100%; height: 39px; gap: 9px; margin-top: 12px; color: white; background: var(--green); border: 0; border-radius: 7px; box-shadow: 0 4px 10px rgb(29 154 119 / 16%); font-size: 11px; font-weight: 700; cursor: pointer; transition: background .15s, transform .15s; }
+.primary-button:hover:not(:disabled) { background: var(--green-dark); transform: translateY(-1px); }
+.primary-button:disabled { background: #b5c8c2; box-shadow: none; cursor: not-allowed; }
+.primary-button svg { width: 16px; height: 16px; }
+.api-note { display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: 10px; color: #929eaa; font-size: 8px; }
+.api-note strong { color: #69798a; font-weight: 700; }
+.api-check { display: grid; width: 12px; height: 12px; margin-right: 2px; place-items: center; color: #268969; background: #e8f6f0; border-radius: 50%; font-size: 8px; font-weight: 700; }
+.api-separator { margin: 0 2px; color: #bdc5cc; }
+
+.waypoints-section { display: flex; flex: 1; flex-direction: column; min-height: 155px; padding: 21px 29px 14px; }
+.waypoints-heading { margin-bottom: 10px; }
+.count-badge { display: grid; min-width: 20px; height: 20px; padding: 0 5px; place-items: center; color: #738095; background: #f1f4f6; border-radius: 6px; font-size: 9px; font-weight: 700; }
+.export-button { display: flex; align-items: center; gap: 4px; padding: 4px 0; color: #758297; background: transparent; border: 0; font-size: 9px; font-weight: 700; cursor: pointer; }
+.export-button:disabled { color: #bcc4ce; cursor: default; }
+.export-button svg { width: 14px; height: 14px; }
+.empty-state { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; min-height: 92px; gap: 4px; color: #9aa5b4; text-align: center; }
+.empty-state[hidden] { display: none; }
+.empty-icon { display: grid; width: 38px; height: 38px; margin-bottom: 5px; place-items: center; color: #a4b8b0; background: #f4f8f6; border-radius: 12px; }
+.empty-icon svg { width: 26px; height: 26px; }
+.empty-state strong { color: #6d7a8c; font-size: 10px; }
+.empty-state > span:last-child { font-size: 9px; }
+.waypoint-list { display: flex; flex-direction: column; gap: 7px; }
+.waypoint-card { position: relative; padding: 10px 11px 9px; background: #fafbfc; border: 1px solid #edf0f3; border-radius: 8px; transition: border-color .15s, background .15s; }
+.waypoint-card:hover { background: #f7fbf9; border-color: #dcece5; }
+.waypoint-top { display: flex; align-items: center; gap: 8px; }
+.waypoint-badge { display: grid; width: 22px; height: 22px; flex: 0 0 22px; place-items: center; color: #fff; background: #263b51; border-radius: 7px; font-size: 9px; font-weight: 700; }
+.waypoint-info { min-width: 0; flex: 1; }
+.waypoint-name { display: block; overflow: hidden; color: #34445a; font-size: 10px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.waypoint-coords { display: block; margin-top: 2px; color: #98a2b0; font-size: 8px; font-variant-numeric: tabular-nums; }
+.remove-waypoint { display: grid; width: 22px; height: 22px; place-items: center; color: #aab3be; background: transparent; border: 0; border-radius: 5px; font-size: 15px; cursor: pointer; }
+.remove-waypoint:hover { color: #bb5d61; background: #fff0ef; }
+.altitude-row { display: flex; align-items: center; justify-content: space-between; margin-top: 9px; padding-top: 7px; border-top: 1px solid #edf0f3; }
+.altitude-edit { display: flex; align-items: center; gap: 5px; color: #8390a0; font-size: 8px; }
+.altitude-edit input { width: 45px; padding: 2px 3px; color: #516074; background: white; border: 1px solid #e7ebef; border-radius: 4px; font-size: 9px; text-align: right; }
+.wind-result { display: flex; align-items: center; gap: 5px; color: #526579; font-size: 9px; font-weight: 700; }
+.wind-arrow { display: inline-block; color: #178c70; font-size: 13px; line-height: 1; }
+.wind-result.pending { color: #9ea8b4; font-weight: 500; }
+.height-note { margin-top: 6px; color: #9ba5b2; font-size: 8px; }
+.waypoint-card.selected { border-color: #85c9b2; box-shadow: 0 0 0 2px #e9f7f1; }
+.sidebar-footer { display: flex; flex-direction: column; gap: 7px; padding: 11px 29px 14px; border-top: 1px solid #f0f2f5; }
+.forecast-source { display: flex; align-items: center; gap: 7px; color: #78869a; font-size: 9px; }
+.source-dot { width: 6px; height: 6px; background: #d2d9e0; border-radius: 50%; }
+.source-dot.ready { background: #32b78b; box-shadow: 0 0 0 3px #e5f5ee; }
+.source-dot.loading { background: #e0a83b; box-shadow: 0 0 0 3px #fcf3dc; animation: pulse 1.2s infinite; }
+.source-dot.error { background: #d56267; box-shadow: 0 0 0 3px #fff0f0; }
+.footer-caption { color: #a6afba; font-size: 7px; font-weight: 600; letter-spacing: .65px; }
+.copyright { color: #8d99a8; font-size: 10px; }
+
+.map-area { position: relative; min-width: 0; min-height: 0; background: #e9eff0; }
+#map { position: absolute; inset: 0; z-index: 0; }
+.leaflet-container { font-family: "DM Sans", sans-serif; background: #e7eeed; }
+.map-topbar { position: absolute; z-index: 400; top: 20px; right: 24px; left: 24px; display: flex; align-items: center; justify-content: space-between; gap: 14px; pointer-events: none; }
+.map-topbar > * { pointer-events: auto; }
+.search-box { display: flex; align-items: center; width: min(390px, 53%); height: 43px; gap: 9px; padding: 0 6px 0 13px; background: white; border: 1px solid rgb(221 229 232 / 75%); border-radius: 9px; box-shadow: 0 5px 18px rgb(40 58 68 / 10%); }
+.search-box > svg { width: 17px; height: 17px; flex: 0 0 17px; color: #8795a3; }
+.search-box input { min-width: 0; flex: 1; color: #38485b; background: transparent; border: 0; outline: 0; font-size: 10px; }
+.search-box input::placeholder { color: #9ba6b3; }
+.search-box button { display: flex; align-items: center; height: 30px; gap: 5px; padding: 0 9px; color: #fff; background: #1e9775; border: 0; border-radius: 6px; font-size: 9px; font-weight: 700; cursor: pointer; }
+.search-box button:hover { background: #157e61; }
+.search-box button svg { width: 13px; height: 13px; }
+.map-tools { display: flex; align-items: center; gap: 9px; }
+.map-legend { display: flex; align-items: center; gap: 7px; padding: 9px 11px; color: #59697a; background: rgb(255 255 255 / 94%); border: 1px solid #e3e9ec; border-radius: 8px; box-shadow: 0 4px 15px rgb(40 58 68 / 8%); font-size: 9px; }
+.legend-line { width: 17px; border-top: 2px dashed #248c75; }
+.legend-wind { margin-left: 4px; color: #18866b; font-size: 13px; }
+.icon-button { display: grid; width: 36px; height: 36px; place-items: center; color: #516375; background: #fff; border: 1px solid #e3e9ec; border-radius: 8px; box-shadow: 0 4px 15px rgb(40 58 68 / 8%); cursor: pointer; }
+.icon-button:hover { color: var(--green); }
+.icon-button svg { width: 18px; height: 18px; }
+.map-hint { position: absolute; z-index: 400; top: 77px; left: 24px; display: flex; align-items: center; gap: 7px; padding: 7px 10px; color: #627285; background: rgb(255 255 255 / 93%); border: 1px solid #e6ebed; border-radius: 6px; box-shadow: 0 3px 11px rgb(40 58 68 / 7%); font-size: 9px; pointer-events: none; }
+.map-hint-icon { display: grid; width: 15px; height: 15px; place-items: center; color: #fff; background: #269679; border-radius: 50%; font-size: 12px; line-height: 1; }
+.map-coordinates { position: absolute; z-index: 400; right: 24px; bottom: 56px; padding: 6px 9px; color: #728195; background: rgb(255 255 255 / 91%); border: 1px solid #e6ebed; border-radius: 6px; font-size: 8px; font-variant-numeric: tabular-nums; pointer-events: none; }
+.map-footer { position: absolute; z-index: 400; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: space-between; min-height: 39px; gap: 12px; padding: 0 24px; background: rgb(255 255 255 / 95%); border-top: 1px solid rgb(228 234 236 / 85%); }
+.altitude-note { display: flex; align-items: center; gap: 7px; color: #78879a; font-size: 9px; }
+.altitude-icon { display: grid; width: 18px; height: 18px; place-items: center; color: #23896f; background: #eaf6f1; border-radius: 5px; font-size: 13px; font-weight: 700; }
+.wind-units { display: flex; align-items: center; gap: 5px; color: #9aa5b1; font-size: 7px; font-weight: 600; letter-spacing: .55px; white-space: nowrap; }
+.wind-units strong { color: #596a7b; font-size: 8px; letter-spacing: .2px; }
+.wind-units > span { width: 1px; height: 10px; margin: 0 4px; background: #e1e6e9; }
+.loading-overlay { position: absolute; z-index: 700; inset: 0; display: grid; place-items: center; background: rgb(235 241 241 / 43%); backdrop-filter: blur(2px); }
+.loading-overlay[hidden] { display: none; }
+.loading-card { display: flex; min-width: 220px; flex-direction: column; align-items: center; gap: 7px; padding: 20px 24px; background: #fff; border: 1px solid #e7eded; border-radius: 12px; box-shadow: 0 10px 30px rgb(41 58 65 / 13%); }
+.loading-card strong { color: #334459; font: 700 12px "Manrope", sans-serif; }
+.loading-card > span:last-child { color: #8995a2; font-size: 9px; }
+.spinner { width: 22px; height: 22px; margin-bottom: 3px; border: 2px solid #e2f0eb; border-top-color: #269877; border-radius: 50%; animation: spin .75s linear infinite; }
+.leaflet-popup-content-wrapper { border-radius: 9px; box-shadow: 0 5px 20px rgb(36 53 60 / 16%); }
+.leaflet-popup-content { margin: 11px 13px; font-size: 11px; line-height: 1.6; }
+.popup-title { font-weight: 700; color: #34465b; }
+.popup-detail { color: #738197; }
+.popup-wind { color: #168568; font-weight: 700; }
+.waypoint-marker { width: 210px; height: 38px; background: transparent; border: 0; }
+.map-waypoint-label { display: flex; width: max-content; height: 36px; align-items: center; gap: 5px; }
+.waypoint-marker-inner { position: relative; display: grid; width: 27px; height: 27px; place-items: center; color: #fff; background: #263a50; border: 2px solid #fff; border-radius: 9px 9px 9px 2px; box-shadow: 0 2px 7px rgb(36 53 60 / 28%); font: 700 10px "DM Sans", sans-serif; transform: rotate(-45deg); }
+.waypoint-marker-inner span { transform: rotate(45deg); }
+.waypoint-marker.selected .waypoint-marker-inner { background: #199778; box-shadow: 0 0 0 4px rgb(34 156 120 / 20%), 0 2px 7px rgb(36 53 60 / 25%); }
+.map-wind-label { display: flex; min-height: 27px; align-items: center; gap: 5px; padding: 3px 7px; color: #34465b; background: rgb(255 255 255 / 96%); border: 1px solid #dfe9e5; border-radius: 7px; box-shadow: 0 2px 8px rgb(36 53 60 / 16%); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.map-wind-arrow { display: inline-block; color: #14886c; font-size: 15px; line-height: 1; }
+.map-wind-direction { padding-left: 5px; color: #178568; border-left: 1px solid #e4ebe8; font-variant-numeric: tabular-nums; }
+.leaflet-control-attribution { font-size: 8px !important; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse { 50% { opacity: .55; } }
+
+@media (max-width: 900px) {
+  .app-shell { grid-template-columns: 350px minmax(0, 1fr); }
+  .intro, .waypoints-section { padding-right: 23px; padding-left: 23px; }
+  .brand { padding-right: 23px; padding-left: 23px; }
+  .panel { margin-right: 15px; margin-left: 15px; }
+  .map-legend { display: none; }
+}
+
+@media (max-width: 660px) {
+  body { min-width: 360px; }
+  .app-shell { display: flex; height: auto; min-height: 100vh; flex-direction: column; overflow: visible; }
+  .sidebar { min-height: 0; box-shadow: 0 4px 20px rgb(29 44 66 / 5%); }
+  .brand { height: 63px; flex-basis: 63px; }
+  .sidebar-content { overflow: visible; }
+  .intro { padding-top: 20px; padding-bottom: 16px; }
+  .intro h1 { font-size: 24px; }
+  .route-panel { margin-bottom: 12px; }
+  .waypoints-section { min-height: 115px; padding-top: 12px; padding-bottom: 12px; }
+  .empty-state { min-height: 76px; }
+  .sidebar-footer { padding-top: 9px; padding-bottom: 10px; }
+  .map-area { flex: 0 0 62vh; min-height: 430px; }
+  .map-topbar { top: 12px; right: 12px; left: 12px; }
+  .search-box { width: min(390px, calc(100% - 46px)); }
+  .map-hint { top: 65px; left: 12px; }
+  .map-footer { padding: 0 12px; }
+  .altitude-note { font-size: 8px; }
+  .wind-units { font-size: 6px; }
+  .wind-units strong { font-size: 7px; }
+  .map-coordinates { right: 12px; bottom: 49px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+
+.intro p { font-size: 14px; }
+.eyebrow, .step-number { font-size: 11px; }
+.section-heading h2, .waypoints-heading h2 { font-size: 15px; }
+.text-button, .export-button { font-size: 12px; }
+.upload-copy strong { font-size: 12px; }
+.upload-copy > span, .browse-button, .manual-hint, .message { font-size: 10px; }
+.live-pill { font-size: 10px; }
+.field-label { font-size: 11px; }
+.field-label > span { font-size: 9px; }
+.time-field input { font-size: 12px; }
+.primary-button { font-size: 13px; }
+.api-note { font-size: 10px; }
+.count-badge { font-size: 11px; }
+.empty-state strong { font-size: 12px; }
+.empty-state > span:last-child { font-size: 11px; }
+.waypoint-name { font-size: 12px; }
+.waypoint-coords { font-size: 10px; }
+.altitude-edit { font-size: 10px; }
+.altitude-edit input { font-size: 11px; }
+.wind-result { font-size: 12px; }
+.height-note { font-size: 10px; }
+.forecast-source { font-size: 11px; }
+.footer-caption { font-size: 9px; }
+.search-box input { font-size: 12px; }
+.search-box button { font-size: 11px; }
+.map-legend, .map-hint { font-size: 11px; }
+.map-coordinates, .altitude-note { font-size: 10px; }
+.wind-units { font-size: 9px; }
+.wind-units strong { font-size: 10px; }
+.leaflet-popup-content { font-size: 13px; }
+.loading-card strong { font-size: 14px; }
+.loading-card > span:last-child { font-size: 11px; }
+
+@media (max-width: 660px) {
+  .wind-units { font-size: 8px; }
+  .wind-units strong { font-size: 9px; }
+}
+
+:root[data-theme="dark"] body,
+:root[data-theme="dark"] .sidebar,
+:root[data-theme="dark"] .app-shell { background: var(--canvas); color: var(--ink); }
+
+:root[data-theme="dark"] .brand,
+:root[data-theme="dark"] .sidebar-footer { border-color: #293545; }
+:root[data-theme="dark"] .brand-caption,
+:root[data-theme="dark"] .eyebrow,
+:root[data-theme="dark"] .intro p,
+:root[data-theme="dark"] .step-number,
+:root[data-theme="dark"] .field-label,
+:root[data-theme="dark"] .manual-hint,
+:root[data-theme="dark"] .forecast-source,
+:root[data-theme="dark"] .altitude-edit,
+:root[data-theme="dark"] .altitude-note,
+:root[data-theme="dark"] .map-coordinates,
+:root[data-theme="dark"] .map-hint,
+:root[data-theme="dark"] .map-legend,
+:root[data-theme="dark"] .footer-caption,
+:root[data-theme="dark"] .height-note { color: #a4b2c4; }
+
+:root[data-theme="dark"] .panel,
+:root[data-theme="dark"] .time-field,
+:root[data-theme="dark"] .waypoint-card,
+:root[data-theme="dark"] .map-legend,
+:root[data-theme="dark"] .map-hint,
+:root[data-theme="dark"] .map-coordinates,
+:root[data-theme="dark"] .search-box,
+:root[data-theme="dark"] .icon-button,
+:root[data-theme="dark"] .loading-card,
+:root[data-theme="dark"] .theme-toggle {
+  color: var(--ink);
+  background-color: #1c2837;
+  border-color: #344356;
+}
+
+:root[data-theme="dark"] .upload-zone {
+  color: var(--ink);
+  background: #192532;
+  border-color: #405064;
+}
+:root[data-theme="dark"] .upload-zone:hover,
+:root[data-theme="dark"] .upload-zone.dragging { background: #1a332d; border-color: #4aab8f; }
+:root[data-theme="dark"] .browse-button,
+:root[data-theme="dark"] .time-field input,
+:root[data-theme="dark"] .search-box input,
+:root[data-theme="dark"] .altitude-edit input {
+  color: #e4ebf3;
+  background-color: transparent;
+}
+:root[data-theme="dark"] .browse-button,
+:root[data-theme="dark"] .altitude-edit input { border-color: #3a485a; }
+:root[data-theme="dark"] .search-box input::placeholder { color: #8998ab; }
+:root[data-theme="dark"] .divider span { background: #18222f; }
+:root[data-theme="dark"] .divider::before,
+:root[data-theme="dark"] .altitude-row { border-color: #303e50; }
+:root[data-theme="dark"] .divider { color: #95a4b7; }
+:root[data-theme="dark"] .text-button { color: #56c5a3; }
+:root[data-theme="dark"] .text-button:disabled { color: #728096; }
+:root[data-theme="dark"] .count-badge,
+:root[data-theme="dark"] .empty-icon,
+:root[data-theme="dark"] .theme-toggle { background-color: #243244; }
+:root[data-theme="dark"] .empty-state,
+:root[data-theme="dark"] .waypoint-coords,
+:root[data-theme="dark"] .remove-waypoint,
+:root[data-theme="dark"] .wind-result.pending,
+:root[data-theme="dark"] .field-label > span { color: #94a3b6; }
+:root[data-theme="dark"] .waypoint-name,
+:root[data-theme="dark"] .empty-state strong,
+:root[data-theme="dark"] .map-coordinates { color: #d4dfeb; }
+:root[data-theme="dark"] .waypoint-badge,
+:root[data-theme="dark"] .waypoint-marker-inner { background-color: #34465d; }
+:root[data-theme="dark"] .waypoint-card:hover { background: #202e3d; border-color: #3d655c; }
+:root[data-theme="dark"] .waypoint-card.selected { border-color: #4aa98e; box-shadow: 0 0 0 2px rgb(46 164 129 / 18%); }
+:root[data-theme="dark"] .map-area,
+:root[data-theme="dark"] .leaflet-container { background: #17212d; }
+:root[data-theme="dark"] .leaflet-tile-pane { filter: brightness(.68) invert(.88) hue-rotate(180deg) saturate(.7); }
+:root[data-theme="dark"] .map-footer {
+  color: var(--ink);
+  background: rgb(24 34 47 / 96%);
+  border-color: #303d4d;
+}
+:root[data-theme="dark"] .wind-units { color: #9eacbd; }
+:root[data-theme="dark"] .wind-units strong { color: #d3deea; }
+:root[data-theme="dark"] .wind-units > span { background: #3a4859; }
+:root[data-theme="dark"] .altitude-icon { color: #75d1b3; background: #203d35; }
+:root[data-theme="dark"] .map-wind-label {
+  color: #e3ecf4;
+  background: rgb(25 37 51 / 96%);
+  border-color: #405064;
+}
+:root[data-theme="dark"] .map-wind-direction { color: #70d2b4; border-color: #405064; }
+:root[data-theme="dark"] .leaflet-control-zoom a {
+  color: #e0e9f2;
+  background: #1c2837;
+  border-color: #344356;
+}
+:root[data-theme="dark"] .leaflet-control-attribution {
+  color: #a5b1c0;
+  background: rgb(24 34 47 / 85%);
+}
+:root[data-theme="dark"] .leaflet-control-attribution a { color: #8bcdb9; }
+:root[data-theme="dark"] .leaflet-popup-content-wrapper,
+:root[data-theme="dark"] .leaflet-popup-tip {
+  color: #e4ebf3;
+  background: #1c2837;
+}
+:root[data-theme="dark"] .leaflet-popup-content { color: #e4ebf3; }
+:root[data-theme="dark"] .popup-title { color: #e4ebf3; }
+:root[data-theme="dark"] .popup-detail { color: #a4b2c4; }
+:root[data-theme="dark"] .popup-wind { color: #66d0ae; }
+:root[data-theme="dark"] .loading-overlay { background: rgb(12 18 26 / 52%); }
+:root[data-theme="dark"] .loading-card { border-color: #344356; }
+:root[data-theme="dark"] .loading-card strong { color: #e4ebf3; }
+:root[data-theme="dark"] .loading-card > span:last-child { color: #a4b2c4; }
+:root[data-theme="dark"] .message { color: #b6d6e5; background: #203443; }
+:root[data-theme="dark"] .message.error { color: #f0b5b6; background: #40272d; }
+:root[data-theme="dark"] .primary-button:disabled { background: #40584f; }

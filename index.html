@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f5f7fa">
+    <meta name="description" content="Altitude-aware wind forecasts for your drone mission waypoints.">
+    <title>WindPath — Mission wind planner</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <header class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" fill="none"><path d="M5 19.5c4.2 0 4.2-7 8.5-7 3.8 0 4.7 5 8.2 5 2.2 0 3.6-1.6 5.3-3.7M5 24h7.5c2.8 0 3.4-3 6.3-3h8.2M5 14h2.3" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="23.2" cy="8" r="2" fill="currentColor"/></svg>
+          </div>
+          <div><span class="brand-name">windpath</span><span class="brand-caption">MISSION WIND PLANNER</span></div>
+          <button id="themeToggle" class="theme-toggle" type="button" aria-label="Switch to dark mode" title="Switch to dark mode">
+            <svg class="theme-icon theme-icon-sun" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="3.3" stroke="currentColor" stroke-width="1.5"/><path d="M10 2.5v1.6m0 11.8v1.6m7.5-7.5h-1.6M4.1 10H2.5m12.8-5.3-1.1 1.1M5.8 14.2l-1.1 1.1m10.6 0-1.1-1.1M5.8 5.8 4.7 4.7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <svg class="theme-icon theme-icon-moon" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M16.4 12.2A7.1 7.1 0 0 1 7.8 3.6a7.2 7.2 0 1 0 8.6 8.6Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          </button>
+        </header>
+
+        <div class="sidebar-content">
+          <section class="intro">
+            <div class="eyebrow"><span class="eyebrow-dot"></span> FLIGHT CONDITIONS</div>
+            <h1>Know the wind<br>at every <span>altitude.</span></h1>
+            <p>Plan your route with real forecast data at each waypoint.</p>
+          </section>
+
+          <section class="panel mission-panel">
+            <div class="section-heading">
+              <div><span class="step-number">01</span><h2>Your mission</h2></div>
+              <button class="text-button" id="clearMission" type="button" disabled>Clear</button>
+            </div>
+            <label class="upload-zone" id="uploadZone" for="missionFile">
+              <input id="missionFile" type="file" accept=".waypoints,.txt,.plan,application/json,text/plain">
+              <span class="upload-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 15.5v3A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5v-3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
+              <span class="upload-copy"><strong>Drop a flight plan here</strong><span>Mission Planner .waypoints or QGroundControl .plan</span></span>
+              <span class="browse-button">Browse</span>
+            </label>
+            <div class="divider"><span>OR</span></div>
+            <div class="manual-hint"><span class="click-indicator"></span> Click anywhere on the map to add a waypoint</div>
+            <div class="message" id="message" role="status" aria-live="polite" hidden></div>
+          </section>
+
+          <section class="panel route-panel">
+            <div class="section-heading">
+              <div><span class="step-number">02</span><h2>Wind forecast</h2></div>
+              <span class="live-pill"><span></span> LIVE API</span>
+            </div>
+            <label class="field-label" for="forecastTime">Forecast time <span>LOCAL TIME</span></label>
+            <div class="time-field">
+              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M10 6v4.3l2.8 1.7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              <input id="forecastTime" type="datetime-local">
+            </div>
+            <button id="analyzeButton" class="primary-button" type="button" disabled>
+              <span class="button-label">Check waypoint winds</span>
+              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h12m0 0-5-5m5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <div class="api-note"><span class="api-check">✓</span> Free forecast by <strong>Open-Meteo</strong><span class="api-separator">·</span><strong>OpenStreetMap</strong></div>
+          </section>
+
+          <section class="waypoints-section">
+            <div class="waypoints-heading">
+              <div><span class="step-number">03</span><h2>Waypoints</h2><span class="count-badge" id="waypointCount">0</span></div>
+              <button class="export-button" id="exportButton" type="button" disabled title="Export waypoint wind report as CSV">
+                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3v9m0 0 3.3-3.3M10 12 6.7 8.7M4.5 13.5v2A1.5 1.5 0 0 0 6 17h8a1.5 1.5 0 0 0 1.5-1.5v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Export
+              </button>
+            </div>
+            <div class="empty-state" id="emptyState">
+              <span class="empty-icon" aria-hidden="true">
+                <svg viewBox="0 0 32 32" fill="none"><path d="M6 24.5 12.5 18l4 4L26 12.5M20 12.5h6v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="24.5" r="2" fill="currentColor"/><circle cx="26" cy="12.5" r="2" fill="currentColor"/></svg>
+              </span>
+              <strong>Your route starts here</strong>
+              <span>Upload a mission or click on the map.</span>
+            </div>
+            <div class="waypoint-list" id="waypointList"></div>
+          </section>
+          <footer class="sidebar-footer">
+            <div class="forecast-source"><span class="source-dot"></span><span id="sourceStatus">Ready when you are</span></div>
+            <span class="footer-caption">WIND ESTIMATES · NOT FOR SAFETY-CRITICAL USE</span>
+            <span class="copyright">© Radoniaina Ratovondriaka 2026</span>
+          </footer>
+        </div>
+      </aside>
+
+      <main class="map-area">
+        <div class="map-topbar">
+          <form id="searchForm" class="search-box">
+            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="8.7" cy="8.7" r="5.6" stroke="currentColor" stroke-width="1.5"/><path d="m13 13 3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <input id="locationSearch" type="search" placeholder="Search a place or coordinates" aria-label="Search a place or coordinates" autocomplete="off">
+            <button type="submit" aria-label="Search location"><span>Search</span><svg viewBox="0 0 20 20" fill="none"><path d="M4 10h12m0 0-5-5m5 5-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          </form>
+          <div class="map-tools">
+            <div class="map-legend"><span class="legend-line"></span> Mission route <span class="legend-wind">↗</span> Wind flow</div>
+            <button id="locateButton" class="icon-button" type="button" title="Go to my location" aria-label="Go to my location">
+              <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="5.2" stroke="currentColor" stroke-width="1.4"/><circle cx="10" cy="10" r="1.4" fill="currentColor"/><path d="M10 2.5v2m0 11v2m7.5-7.5h-2m-11 0h-2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+        </div>
+        <div id="map" aria-label="Interactive map; click to add a waypoint"></div>
+        <div class="map-hint"><span class="map-hint-icon">+</span> Click map to add waypoint</div>
+        <div class="map-coordinates" id="mapCoordinates">Move over the map to see coordinates</div>
+        <div class="map-footer">
+          <div class="altitude-note"><span class="altitude-icon">↕</span><span>Wind is estimated at each waypoint’s flight altitude</span></div>
+          <div class="wind-units">SPEED <strong>m/s</strong><span></span> DIRECTION <strong>WIND FROM</strong></div>
+        </div>
+        <div class="loading-overlay" id="loadingOverlay" hidden>
+          <div class="loading-card"><span class="spinner"></span><strong>Reading the wind</strong><span id="loadingText">Fetching altitude-specific forecasts…</span></div>
+        </div>
+      </main>
+    </div>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script src="script.js"></script>
+  </body>
+</html>
