@@ -227,7 +227,7 @@ button { color: inherit; }
 .map-legend { display: flex; align-items: center; gap: 7px; padding: 9px 11px; color: #59697a; background: rgb(255 255 255 / 94%); border: 1px solid #e3e9ec; border-radius: 8px; box-shadow: 0 4px 15px rgb(40 58 68 / 8%); font-size: 9px; }
 .legend-line { width: 17px; border-top: 2px dashed #248c75; }
 .legend-wind { margin-left: 4px; color: #18866b; font-size: 13px; }
-.map-follow-control, .clouds-toggle { display: flex; height: 36px; align-items: center; gap: 7px; padding: 0 10px; color: #516375; background: #fff; border: 1px solid #e3e9ec; border-radius: 8px; box-shadow: 0 4px 15px rgb(40 58 68 / 8%); font-size: 9px; font-weight: 700; white-space: nowrap; }
+.map-follow-control { display: flex; height: 36px; align-items: center; gap: 7px; padding: 0 10px; color: #516375; background: #fff; border: 1px solid #e3e9ec; border-radius: 8px; box-shadow: 0 4px 15px rgb(40 58 68 / 8%); font-size: 9px; font-weight: 700; white-space: nowrap; }
 .map-follow-control { position: relative; cursor: pointer; }
 .map-follow-control input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .map-follow-control input:focus-visible + .follow-radio { outline: 2px solid #238d74; outline-offset: 2px; }
@@ -236,18 +236,14 @@ button { color: inherit; }
 .follow-radio::after { width: 6px; height: 6px; background: transparent; border-radius: 50%; content: ""; }
 .map-follow-control input:checked + .follow-radio { border-color: #1d9a77; }
 .map-follow-control input:checked + .follow-radio::after { background: #1d9a77; }
-.clouds-toggle { cursor: pointer; }
-.clouds-toggle[aria-pressed="true"] { color: #167c65; background: #edf8f4; border-color: #b9ded2; }
-.clouds-symbol { font-size: 16px; line-height: 1; }
 .icon-button { display: grid; width: 36px; height: 36px; place-items: center; color: #516375; background: #fff; border: 1px solid #e3e9ec; border-radius: 8px; box-shadow: 0 4px 15px rgb(40 58 68 / 8%); cursor: pointer; }
 .icon-button:hover { color: var(--green); }
 .icon-button svg { width: 18px; height: 18px; }
 .map-hint { position: absolute; z-index: 400; top: 77px; left: 24px; display: flex; align-items: center; gap: 7px; padding: 7px 10px; color: #627285; background: rgb(255 255 255 / 93%); border: 1px solid #e6ebed; border-radius: 6px; box-shadow: 0 3px 11px rgb(40 58 68 / 7%); font-size: 9px; pointer-events: none; }
 .map-hint-icon { display: grid; width: 15px; height: 15px; place-items: center; color: #fff; background: #269679; border-radius: 50%; font-size: 12px; line-height: 1; }
-.cloud-status, .mission-alert { position: absolute; z-index: 400; left: 24px; padding: 7px 10px; background: rgb(255 255 255 / 95%); border: 1px solid #e2e9ec; border-radius: 7px; box-shadow: 0 3px 12px rgb(40 58 68 / 10%); font-size: 9px; }
-.cloud-status { bottom: 52px; color: #617286; pointer-events: none; }
+.mission-alert { position: absolute; z-index: 400; left: 24px; padding: 7px 10px; background: rgb(255 255 255 / 95%); border: 1px solid #e2e9ec; border-radius: 7px; box-shadow: 0 3px 12px rgb(40 58 68 / 10%); font-size: 9px; }
 .mission-alert { top: 116px; max-width: min(360px, calc(100% - 48px)); color: #155e50; border-color: #b8dfd3; font-weight: 700; }
-.cloud-status[hidden], .mission-alert[hidden] { display: none !important; }
+.mission-alert[hidden] { display: none !important; }
 .map-coordinates { position: absolute; z-index: 400; right: 24px; bottom: 56px; padding: 6px 9px; color: #728195; background: rgb(255 255 255 / 91%); border: 1px solid #e6ebed; border-radius: 6px; font-size: 8px; font-variant-numeric: tabular-nums; pointer-events: none; }
 .map-footer { position: absolute; z-index: 400; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: space-between; min-height: 39px; gap: 12px; padding: 0 24px; background: rgb(255 255 255 / 95%); border-top: 1px solid rgb(228 234 236 / 85%); }
 .altitude-note { display: flex; align-items: center; gap: 7px; color: #78879a; font-size: 9px; }
@@ -322,9 +318,8 @@ button { color: inherit; }
   .search-box { width: 100%; }
   .map-tools { flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
   .map-legend { display: none; }
-  .map-follow-control, .clouds-toggle { height: 32px; padding: 0 7px; font-size: 8px; }
+  .map-follow-control { height: 32px; padding: 0 7px; font-size: 8px; }
   .map-hint { top: 102px; left: 12px; }
-  .cloud-status { left: 12px; bottom: 49px; }
   .mission-alert { top: 141px; left: 12px; }
   .map-footer { padding: 0 12px; }
   .altitude-note { font-size: 8px; }
@@ -461,10 +456,7 @@ button { color: inherit; }
 :root[data-theme="dark"] .leaflet-container { background: #17212d; }
 :root[data-theme="dark"] .leaflet-tile-pane { filter: brightness(.68) invert(.88) hue-rotate(180deg) saturate(.7); }
 :root[data-theme="dark"] .map-follow-control,
-:root[data-theme="dark"] .clouds-toggle,
-:root[data-theme="dark"] .cloud-status,
 :root[data-theme="dark"] .mission-alert { color: #d3deea; background: rgb(25 37 51 / 96%); border-color: #405064; }
-:root[data-theme="dark"] .clouds-toggle[aria-pressed="true"] { color: #8ee0c3; border-color: #406d61; }
 :root[data-theme="dark"] .follow-radio { border-color: #8192a5; }
 :root[data-theme="dark"] .map-follow-control input:checked + .follow-radio { border-color: #49bd98; }
 :root[data-theme="dark"] .map-follow-control input:checked + .follow-radio::after { background: #49bd98; }
