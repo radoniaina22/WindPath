@@ -120,6 +120,13 @@ button { color: inherit; }
 
 .panel { margin: 0 20px; padding: 17px 17px 15px; background: #fff; border: 1px solid #ebeff3; border-radius: 12px; }
 .mission-panel { margin-bottom: 13px; }
+.mission-summary { display: flex; flex-direction: column; gap: 9px; margin-top: 0; margin-bottom: 13px; }
+.summary-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1px; }
+.summary-heading h2 { margin: 0; font: 700 13px "Manrope", sans-serif; }
+.summary-heading > span { color: #9aa5b4; font-size: 8px; font-weight: 700; letter-spacing: .65px; }
+.summary-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; color: #78859a; font-size: 10px; }
+.summary-row strong { color: #34445a; font-size: 10px; font-weight: 700; text-align: right; }
+.summary-drops { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; color: #34445a; font-size: 10px; font-weight: 700; text-align: right; }
 .section-heading, .waypoints-heading, .section-heading > div, .waypoints-heading > div { display: flex; align-items: center; }
 .section-heading, .waypoints-heading { justify-content: space-between; }
 .section-heading > div, .waypoints-heading > div { gap: 9px; }
@@ -349,6 +356,8 @@ button { color: inherit; }
 :root[data-theme="dark"] .brand-caption,
 :root[data-theme="dark"] .eyebrow,
 :root[data-theme="dark"] .intro p,
+:root[data-theme="dark"] .summary-row,
+:root[data-theme="dark"] .summary-heading > span,
 :root[data-theme="dark"] .step-number,
 :root[data-theme="dark"] .field-label,
 :root[data-theme="dark"] .manual-hint,
@@ -411,6 +420,9 @@ button { color: inherit; }
 :root[data-theme="dark"] .gust-result,
 :root[data-theme="dark"] .field-label > span { color: #94a3b6; }
 :root[data-theme="dark"] .waypoint-name,
+:root[data-theme="dark"] .summary-heading h2,
+:root[data-theme="dark"] .summary-row strong,
+:root[data-theme="dark"] .summary-drops,
 :root[data-theme="dark"] .empty-state strong,
 :root[data-theme="dark"] .map-coordinates { color: #d4dfeb; }
 :root[data-theme="dark"] .waypoint-badge,

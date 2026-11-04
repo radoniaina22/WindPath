@@ -25,6 +25,10 @@ const elements = {
   mapCoordinates: document.getElementById("mapCoordinates"),
   message: document.getElementById("message"),
   missionFile: document.getElementById("missionFile"),
+  summaryArrival: document.getElementById("summaryArrival"),
+  summaryDrops: document.getElementById("summaryDrops"),
+  summaryTakeoff: document.getElementById("summaryTakeoff"),
+  summaryWind: document.getElementById("summaryWind"),
   sourceStatus: document.getElementById("sourceStatus"),
   takeoffTime: document.getElementById("takeoffTime"),
   themeToggle: document.getElementById("themeToggle"),
@@ -182,6 +186,50 @@ function formatArrivalTime(timestamp) {
   return new Date(timestamp).toLocaleString([], {
     month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
   });
+}
+
+function updateMissionSummary() {
+  const takeoffTimestamp = new Date(elements.takeoffTime.value).getTime();
+  elements.summaryTakeoff.textContent = Number.isFinite(takeoffTimestamp)
+    ? formatArrivalTime(takeoffTimestamp)
+    : "Not set";
+
+  const dropWaypoints = state.waypoints.filter(waypoint => waypoint.dropActionCount > 0);
+  if (!dropWaypoints.length) {
+    elements.summaryDrops.textContent = "No drop action in mission";
+  } else {
+    elements.summaryDrops.innerHTML = dropWaypoints.map((waypoint, index) => {
+      const label = waypoint.name || `Waypoint ${waypointNumber(waypoint, state.waypoints.indexOf(waypoint))}`;
+      const time = Number.isFinite(waypoint.etaTimestamp)
+        ? formatArrivalTime(waypoint.etaTimestamp)
+        : "Not estimated";
+      const count = waypoint.dropActionCount > 1 ? ` (${waypoint.dropActionCount} actions)` : "";
+      return `<span>${escapeHtml(label)}${count}: ${escapeHtml(time)}</span>`;
+    }).join("");
+  }
+
+  const finalWaypoint = state.waypoints[state.waypoints.length - 1];
+  elements.summaryArrival.textContent = Number.isFinite(finalWaypoint?.etaTimestamp)
+    ? formatArrivalTime(finalWaypoint.etaTimestamp)
+    : "Not estimated";
+
+  let weightedWindSpeed = 0;
+  let totalDistance = 0;
+  for (let index = 1; index < state.waypoints.length; index += 1) {
+    const waypoint = state.waypoints[index];
+    if (!waypoint.wind || !Number.isFinite(waypoint.etaTimestamp)) continue;
+    const { distance } = distanceAndBearing(state.waypoints[index - 1], waypoint);
+    if (distance <= 0) continue;
+    weightedWindSpeed += waypoint.wind.speed * distance;
+    totalDistance += distance;
+  }
+  if (totalDistance === 0 && state.waypoints.length === 1 && state.waypoints[0].wind) {
+    elements.summaryWind.textContent = `${state.waypoints[0].wind.speed.toFixed(1)} m/s`;
+  } else {
+    elements.summaryWind.textContent = totalDistance > 0
+      ? `${(weightedWindSpeed / totalDistance).toFixed(1)} m/s`
+      : "Not estimated";
+  }
 }
 
 function updateWaypointEstimates(forecasts) {
@@ -546,6 +594,7 @@ function escapeHtml(value) {
 }
 
 function renderWaypoints() {
+  updateMissionSummary();
   elements.waypointCount.textContent = String(state.waypoints.length);
   elements.emptyState.hidden = state.waypoints.length > 0;
   elements.clearMission.disabled = state.waypoints.length === 0;
@@ -790,7 +839,10 @@ function refreshMissionEstimates() {
   }
 }
 
-elements.takeoffTime.addEventListener("change", refreshMissionEstimates);
+elements.takeoffTime.addEventListener("change", () => {
+  updateMissionSummary();
+  refreshMissionEstimates();
+});
 elements.cruiseSpeed.addEventListener("change", () => {
   const value = Number(elements.cruiseSpeed.value);
   if (elements.cruiseSpeed.value && (!Number.isFinite(value) || value <= 0)) {
@@ -801,4 +853,5 @@ elements.cruiseSpeed.addEventListener("change", () => {
 });
 
 elements.takeoffTime.value = localDateTimeValue(new Date());
+updateMissionSummary();
 renderWaypoints();
