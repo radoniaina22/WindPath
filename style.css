@@ -156,12 +156,6 @@ button { color: inherit; }
 .live-pill > span { width: 5px; height: 5px; background: #2ab489; border-radius: 50%; box-shadow: 0 0 0 2px #d5f0e5; }
 .field-label { display: flex; justify-content: space-between; margin: 15px 0 7px; color: #6f7d90; font-size: 9px; font-weight: 700; }
 .field-label > span { color: #a3acb8; font-size: 7px; letter-spacing: .7px; }
-.simple-field { display: flex; align-items: center; height: 36px; padding: 0 10px; border: 1px solid #e6ebf0; border-radius: 7px; }
-.simple-field input { width: 100%; min-width: 0; color: #49576c; background: transparent; border: 0; outline: 0; font-size: 10px; }
-.simple-field input::placeholder { color: #9aa5b2; }
-.simple-field input::-webkit-inner-spin-button,
-.simple-field input::-webkit-outer-spin-button { margin: 0; }
-.simple-field input[type="number"] { appearance: textfield; }
 .time-field { display: flex; align-items: center; height: 36px; gap: 8px; padding: 0 10px; border: 1px solid #e6ebf0; border-radius: 7px; }
 .time-field svg { width: 15px; height: 15px; flex: 0 0 15px; color: #8794a5; }
 .time-field input { width: 100%; min-width: 0; color: #49576c; background: transparent; border: 0; outline: 0; font-size: 10px; }
@@ -323,7 +317,7 @@ button { color: inherit; }
 .live-pill { font-size: 10px; }
 .field-label { font-size: 11px; }
 .field-label > span { font-size: 9px; }
-.time-field input, .simple-field input { font-size: 12px; }
+.time-field input { font-size: 12px; }
 .primary-button { font-size: 13px; }
 .api-note { font-size: 10px; }
 .count-badge { font-size: 11px; }
@@ -376,7 +370,6 @@ button { color: inherit; }
 :root[data-theme="dark"] .height-note { color: #a4b2c4; }
 
 :root[data-theme="dark"] .panel,
-:root[data-theme="dark"] .simple-field,
 :root[data-theme="dark"] .time-field,
 :root[data-theme="dark"] .waypoint-card,
 :root[data-theme="dark"] .map-legend,
@@ -399,7 +392,6 @@ button { color: inherit; }
 :root[data-theme="dark"] .upload-zone:hover,
 :root[data-theme="dark"] .upload-zone.dragging { background: #1a332d; border-color: #4aab8f; }
 :root[data-theme="dark"] .browse-button,
-:root[data-theme="dark"] .simple-field input,
 :root[data-theme="dark"] .time-field input,
 :root[data-theme="dark"] .search-box input,
 :root[data-theme="dark"] .altitude-edit input {

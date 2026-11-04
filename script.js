@@ -10,6 +10,8 @@ const HOURLY_FIELDS = [
   ...PRESSURE_LEVELS.flatMap(([pressure]) => [`wind_speed_${pressure}hPa`, `wind_direction_${pressure}hPa`])
 ];
 const NAV_COMMANDS = new Set([16, 17, 18, 19, 20, 21, 22, 82, 84, 85, 92, 93]);
+const DO_CHANGE_SPEED = 178;
+const DO_SET_SERVO = 183;
 const DEFAULT_CENTER = [-19.0, 46.7];
 
 const elements = {
@@ -17,8 +19,6 @@ const elements = {
   clearMission: document.getElementById("clearMission"),
   emptyState: document.getElementById("emptyState"),
   exportButton: document.getElementById("exportButton"),
-  cruiseSpeed: document.getElementById("cruiseSpeed"),
-  droneModel: document.getElementById("droneModel"),
   loadingOverlay: document.getElementById("loadingOverlay"),
   loadingText: document.getElementById("loadingText"),
   locationSearch: document.getElementById("locationSearch"),
@@ -172,15 +172,21 @@ function distanceAndBearing(from, to) {
   return { distance, bearing };
 }
 
-function estimateGroundSpeed(cruiseSpeed, wind, bearing) {
+function estimateLegSpeeds(speedSetting, wind, bearing) {
   const windVector = windComponents(wind.speed, wind.direction);
   const radians = bearing * Math.PI / 180;
+  if (speedSetting.type === 1) {
+    const east = speedSetting.speed * Math.sin(radians) - windVector.east;
+    const north = speedSetting.speed * Math.cos(radians) - windVector.north;
+    return { groundSpeed: speedSetting.speed, airSpeed: Math.hypot(east, north), note: "" };
+  }
+
   const tailwind = windVector.east * Math.sin(radians) + windVector.north * Math.cos(radians);
   const crosswind = windVector.east * Math.cos(radians) - windVector.north * Math.sin(radians);
-  if (Math.abs(crosswind) >= cruiseSpeed) return { speed: null, note: "Crosswind exceeds cruise speed; track cannot be maintained." };
-  const speed = Math.sqrt(cruiseSpeed ** 2 - crosswind ** 2) + tailwind;
-  if (speed <= 0) return { speed: null, note: "Headwind prevents forward progress at cruise speed." };
-  return { speed, note: "" };
+  if (Math.abs(crosswind) >= speedSetting.speed) return { groundSpeed: null, airSpeed: speedSetting.speed, note: "Crosswind exceeds commanded airspeed; track cannot be maintained." };
+  const groundSpeed = Math.sqrt(speedSetting.speed ** 2 - crosswind ** 2) + tailwind;
+  if (groundSpeed <= 0) return { groundSpeed: null, airSpeed: speedSetting.speed, note: "Headwind prevents forward progress at commanded airspeed." };
+  return { groundSpeed, airSpeed: speedSetting.speed, note: "" };
 }
 
 function formatArrivalTime(timestamp) {
@@ -236,8 +242,6 @@ function updateMissionSummary() {
 function updateWaypointEstimates(forecasts) {
   const takeoffTimestamp = new Date(elements.takeoffTime.value).getTime();
   if (!Number.isFinite(takeoffTimestamp)) throw new Error("Choose a valid takeoff date and time.");
-  const cruiseSpeed = Number(elements.cruiseSpeed.value);
-  const hasCruiseSpeed = Number.isFinite(cruiseSpeed) && cruiseSpeed > 0;
   const home = state.waypoints.find(point => point.sequence === 0) || state.waypoints[0];
   const homeElevation = forecasts[state.waypoints.indexOf(home)].elevation;
   let previousArrival = takeoffTimestamp;
@@ -246,22 +250,25 @@ function updateWaypointEstimates(forecasts) {
   state.waypoints.forEach((waypoint, index) => {
     let arrivalTimestamp = index === 0 ? takeoffTimestamp : null;
     let groundSpeed = null;
+    let airSpeed = null;
     let estimateNote = index === 0 ? "Mission start" : "";
     let sample;
 
-    if (index > 0 && !hasCruiseSpeed) {
-      estimateNote = "Enter cruise speed to estimate arrival.";
+    if (index > 0 && !waypoint.speedSetting) {
+      estimateNote = "No DO_CHANGE_SPEED command is set for this leg.";
     } else if (index > 0 && !Number.isFinite(previousArrival)) {
       estimateNote = "Cannot estimate after an unreachable leg.";
     } else if (index > 0) {
       const { distance, bearing } = distanceAndBearing(state.waypoints[index - 1], waypoint);
-      let candidateArrival = previousArrival + distance / cruiseSpeed * 1000;
+      const { speedSetting } = waypoint;
+      const initialGroundSpeed = speedSetting.speed;
+      let candidateArrival = previousArrival + distance / initialGroundSpeed * 1000;
       let segmentEstimate;
       for (let iteration = 0; iteration < 4; iteration += 1) {
         sample = getWindAtTime(waypoint, forecasts[index], candidateArrival, homeElevation);
-        segmentEstimate = estimateGroundSpeed(cruiseSpeed, sample.wind, bearing);
-        if (!Number.isFinite(segmentEstimate.speed)) break;
-        const revisedArrival = previousArrival + distance / segmentEstimate.speed * 1000;
+        segmentEstimate = estimateLegSpeeds(speedSetting, sample.wind, bearing);
+        if (!Number.isFinite(segmentEstimate.groundSpeed)) break;
+        const revisedArrival = previousArrival + distance / segmentEstimate.groundSpeed * 1000;
         if (Math.abs(revisedArrival - candidateArrival) < 60000) {
           candidateArrival = revisedArrival;
           break;
@@ -269,15 +276,16 @@ function updateWaypointEstimates(forecasts) {
         candidateArrival = revisedArrival;
       }
 
-      if (segmentEstimate && Number.isFinite(segmentEstimate.speed)) {
+      if (segmentEstimate && Number.isFinite(segmentEstimate.groundSpeed)) {
         sample = getWindAtTime(waypoint, forecasts[index], candidateArrival, homeElevation);
-        segmentEstimate = estimateGroundSpeed(cruiseSpeed, sample.wind, bearing);
+        segmentEstimate = estimateLegSpeeds(speedSetting, sample.wind, bearing);
       }
-      if (segmentEstimate && Number.isFinite(segmentEstimate.speed)) {
-        groundSpeed = segmentEstimate.speed;
+      if (segmentEstimate && Number.isFinite(segmentEstimate.groundSpeed)) {
+        groundSpeed = segmentEstimate.groundSpeed;
+        airSpeed = segmentEstimate.airSpeed;
         arrivalTimestamp = previousArrival + distance / groundSpeed * 1000;
       } else {
-        estimateNote = segmentEstimate?.note || "Could not estimate ground speed for this leg.";
+        estimateNote = segmentEstimate?.note || "Could not estimate speed for this leg.";
       }
     }
 
@@ -297,6 +305,8 @@ function updateWaypointEstimates(forecasts) {
       groundElevation: sample.groundElevation,
       etaTimestamp: arrivalTimestamp,
       groundSpeed,
+      airSpeed,
+      speedSetting: waypoint.speedSetting,
       estimateNote
     });
     previousArrival = arrivalTimestamp;
@@ -317,9 +327,19 @@ function parseWaypointsFile(text, fileName) {
     const items = plan.mission && Array.isArray(plan.mission.items) ? plan.mission.items : null;
     if (!items) throw new Error("No QGroundControl mission items were found in this .plan file.");
     const points = [];
+    let activeSpeedSetting = null;
     items.forEach((item, index) => {
       const command = Number(item.command ?? 16);
-      if (command === 183) {
+      if (command === DO_CHANGE_SPEED) {
+        const params = Array.isArray(item.params) ? item.params : [];
+        const speedType = Number(params[0]);
+        const speed = Number(params[1]);
+        if (Number.isFinite(speed) && speed > 0 && (speedType === 0 || speedType === 1)) {
+          activeSpeedSetting = { type: speedType, speed };
+        }
+        return;
+      }
+      if (command === DO_SET_SERVO) {
         const previousWaypoint = points[points.length - 1];
         if (previousWaypoint) previousWaypoint.dropActionCount += 1;
         return;
@@ -344,7 +364,10 @@ function parseWaypointsFile(text, fileName) {
         name: command === 22 ? "Takeoff" : command === 21 ? "Land" : `Waypoint ${item.sequence ?? item.doJumpId ?? index + 1}`,
         altitudeMode
       });
-      if (waypoint) points.push(waypoint);
+      if (waypoint) {
+        waypoint.speedSetting = activeSpeedSetting;
+        points.push(waypoint);
+      }
     });
     if (!points.length) throw new Error("No GPS waypoint coordinates were found in this .plan file.");
     return points;
@@ -353,13 +376,22 @@ function parseWaypointsFile(text, fileName) {
   const lines = trimmed.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   const start = lines[0].startsWith("QGC WPL") ? 1 : 0;
   const points = [];
+  let activeSpeedSetting = null;
   for (const line of lines.slice(start)) {
     const fields = line.split(/\s+/);
     if (fields.length < 12) continue;
     const sequence = Number(fields[0]);
     const frame = Number(fields[2]);
     const command = Number(fields[3]);
-    if (command === 183) {
+    if (command === DO_CHANGE_SPEED) {
+      const speedType = Number(fields[4]);
+      const speed = Number(fields[5]);
+      if (Number.isFinite(speed) && speed > 0 && (speedType === 0 || speedType === 1)) {
+        activeSpeedSetting = { type: speedType, speed };
+      }
+      continue;
+    }
+    if (command === DO_SET_SERVO) {
       const previousWaypoint = points[points.length - 1];
       if (previousWaypoint) previousWaypoint.dropActionCount += 1;
       continue;
@@ -374,7 +406,10 @@ function parseWaypointsFile(text, fileName) {
       name: command === 22 ? "Takeoff" : command === 21 ? "Land" : `Waypoint ${sequence}`,
       altitudeMode: frame === 0 || frame === 5 ? "absolute" : frame === 6 || frame === 10 ? "terrain" : "relative"
     });
-    if (waypoint) points.push(waypoint);
+    if (waypoint) {
+      waypoint.speedSetting = activeSpeedSetting;
+      points.push(waypoint);
+    }
   }
   if (!points.length) throw new Error("No supported GPS waypoints were found. Check that this is a Mission Planner .waypoints file.");
   return points;
@@ -388,7 +423,7 @@ function makeWaypoint({ lat, lon, altitude = 100, frame = 3, sequence, command =
     lat, lon, altitude, frame, sequence, command, name, altitudeMode,
     dropActionCount: 0,
     wind: null, gust: null, forecastTime: null, sampledAltitude: null, altitudeNote: "",
-    etaTimestamp: null, groundSpeed: null, estimateNote: ""
+    etaTimestamp: null, groundSpeed: null, airSpeed: null, speedSetting: null, estimateNote: ""
   };
 }
 
@@ -481,6 +516,7 @@ async function fetchForecastForMission() {
     waypoint.gust = null;
     waypoint.etaTimestamp = null;
     waypoint.groundSpeed = null;
+    waypoint.airSpeed = null;
   });
   renderWaypoints();
   try {
@@ -510,6 +546,7 @@ async function fetchForecastForMission() {
       waypoint.forecastTime = null;
       waypoint.etaTimestamp = null;
       waypoint.groundSpeed = null;
+      waypoint.airSpeed = null;
       waypoint.estimateNote = "";
       waypoint.altitudeNote = "";
     });
@@ -576,7 +613,7 @@ function popupContent(waypoint, index) {
     ? `<div class="popup-wind">${waypoint.wind.speed.toFixed(1)} m/s · wind from ${Math.round(waypoint.wind.direction)}° (${describeWindDirection(waypoint.wind.direction)})</div><div class="popup-detail">10 m gust: ${gust}</div><div class="popup-detail">Wind altitude: ${waypoint.targetAltitudeAgl.toFixed(0)} m AGL · forecast level ${waypoint.wind.altitude.toFixed(0)} m</div>`
     : '<div class="popup-detail">Wind forecast not loaded</div>';
   const estimate = Number.isFinite(waypoint.etaTimestamp)
-    ? `<div class="popup-detail">Estimated arrival: ${formatArrivalTime(waypoint.etaTimestamp)}</div>${waypoint.dropActionCount ? `<div class="popup-detail">Estimated drop: ${formatArrivalTime(waypoint.etaTimestamp)} (${waypoint.dropActionCount} DO_SET_SERVO action${waypoint.dropActionCount === 1 ? "" : "s"})</div>` : ""}<div class="popup-detail">Wind sample: ${formatForecastTime(waypoint.forecastTime)} UTC</div><div class="popup-detail">Ground speed: ${Number.isFinite(waypoint.groundSpeed) ? `${waypoint.groundSpeed.toFixed(1)} m/s` : "Mission start"}</div>`
+    ? `<div class="popup-detail">Estimated arrival: ${formatArrivalTime(waypoint.etaTimestamp)}</div>${waypoint.dropActionCount ? `<div class="popup-detail">Estimated drop: ${formatArrivalTime(waypoint.etaTimestamp)} (${waypoint.dropActionCount} DO_SET_SERVO action${waypoint.dropActionCount === 1 ? "" : "s"})</div>` : ""}<div class="popup-detail">Wind sample: ${formatForecastTime(waypoint.forecastTime)} UTC</div><div class="popup-detail">Ground speed: ${Number.isFinite(waypoint.groundSpeed) ? `${waypoint.groundSpeed.toFixed(1)} m/s` : "Mission start"}</div><div class="popup-detail">Airspeed: ${Number.isFinite(waypoint.airSpeed) ? `${waypoint.airSpeed.toFixed(1)} m/s` : "Unavailable"}</div>`
     : waypoint.estimateNote ? `<div class="popup-detail">${escapeHtml(waypoint.estimateNote)}</div>` : "";
   return `<div class="popup-title">${escapeHtml(waypoint.name || `Waypoint ${index + 1}`)}</div><div class="popup-detail">${waypoint.lat.toFixed(5)}, ${waypoint.lon.toFixed(5)}</div><div class="popup-detail">Mission altitude: ${waypoint.altitude} m</div>${estimate}${wind}`;
 }
@@ -606,6 +643,7 @@ function updateDronePosition() {
   let status = now < first.etaTimestamp ? "UPCOMING" : "IN FLIGHT";
   let positionedOnLeg = false;
   let currentGroundSpeed = null;
+  let currentAirSpeed = null;
 
   for (let index = 1; index < waypoints.length; index += 1) {
     const from = waypoints[index - 1];
@@ -625,6 +663,7 @@ function updateDronePosition() {
       bearing = distanceAndBearing(from, to).bearing;
       positionedOnLeg = true;
       currentGroundSpeed = to.groundSpeed;
+      currentAirSpeed = to.airSpeed;
     }
     break;
   }
@@ -634,6 +673,7 @@ function updateDronePosition() {
     position = { lat: last.lat, lon: last.lon };
     status = "ARRIVED";
     currentGroundSpeed = 0;
+    currentAirSpeed = 0;
   }
 
   if (!state.droneMarker) {
@@ -661,9 +701,8 @@ function updateDronePosition() {
     if (plane) plane.style.transform = `rotate(${positionedOnLeg ? bearing : 0}deg)`;
     if (statusLabel) statusLabel.textContent = status;
     if (speedsLabel) {
-      const airSpeed = Number(elements.cruiseSpeed.value);
-      const airSpeedText = Number.isFinite(airSpeed) && airSpeed > 0 ? `${airSpeed.toFixed(1)}` : "—";
       const groundSpeedText = Number.isFinite(currentGroundSpeed) ? currentGroundSpeed.toFixed(1) : "—";
+      const airSpeedText = Number.isFinite(currentAirSpeed) ? currentAirSpeed.toFixed(1) : "—";
       speedsLabel.textContent = `GS ${groundSpeedText} · AS ${airSpeedText} m/s`;
     }
   }
@@ -751,6 +790,7 @@ function cancelForecastRequest() {
     waypoint.forecastTime = null;
     waypoint.etaTimestamp = null;
     waypoint.groundSpeed = null;
+    waypoint.airSpeed = null;
     waypoint.estimateNote = "";
     waypoint.altitudeNote = "";
   });
@@ -768,10 +808,8 @@ function zoomToMission() {
 
 function exportCsv() {
   const rows = [
-    ["Drone", "Cruise speed (m/s)", "Takeoff time", "Waypoint", "Latitude", "Longitude", "Mission altitude (m)", "Altitude above ground (m)", "Ground elevation (m)", "Wind speed (m/s)", "Wind gust at 10 m (m/s)", "Wind direction (degrees from north)", "Wind direction", "Ground speed (m/s)", "Estimated arrival", "Forecast time UTC"],
+    ["Takeoff time", "Waypoint", "Latitude", "Longitude", "Mission altitude (m)", "Altitude above ground (m)", "Ground elevation (m)", "Wind speed (m/s)", "Wind gust at 10 m (m/s)", "Wind direction (degrees from north)", "Wind direction", "DO_CHANGE_SPEED type", "DO_CHANGE_SPEED value (m/s)", "Ground speed (m/s)", "Airspeed (m/s)", "Estimated arrival", "Forecast time UTC"],
     ...state.waypoints.map((point, index) => [
-      elements.droneModel.value.trim(),
-      elements.cruiseSpeed.value,
       elements.takeoffTime.value ? `${new Date(elements.takeoffTime.value).toISOString().replace("T", " ").slice(0, 16)} UTC` : "",
       point.name || `Waypoint ${index + 1}`,
       point.lat.toFixed(6),
@@ -783,7 +821,10 @@ function exportCsv() {
       Number.isFinite(point.gust) ? point.gust.toFixed(2) : "",
       point.wind ? Math.round(point.wind.direction) : "",
       point.wind ? describeWindDirection(point.wind.direction) : "",
+      point.speedSetting ? point.speedSetting.type === 0 ? "Airspeed" : "Ground speed" : "",
+      point.speedSetting ? point.speedSetting.speed.toFixed(2) : "",
       Number.isFinite(point.groundSpeed) ? point.groundSpeed.toFixed(2) : "",
+      Number.isFinite(point.airSpeed) ? point.airSpeed.toFixed(2) : "",
       Number.isFinite(point.etaTimestamp) ? `${new Date(point.etaTimestamp).toISOString().replace("T", " ").slice(0, 16)} UTC` : "",
       point.forecastTime ? `${point.forecastTime.replace("T", " ")} UTC` : ""
     ])
@@ -925,15 +966,6 @@ elements.takeoffTime.addEventListener("change", () => {
   updateMissionSummary();
   refreshMissionEstimates();
 });
-elements.cruiseSpeed.addEventListener("change", () => {
-  const value = Number(elements.cruiseSpeed.value);
-  if (elements.cruiseSpeed.value && (!Number.isFinite(value) || value <= 0)) {
-    setMessage("Cruise speed must be greater than zero meters per second.", true);
-    return;
-  }
-  refreshMissionEstimates();
-});
-
 elements.takeoffTime.value = localDateTimeValue(new Date());
 updateMissionSummary();
 renderWaypoints();
