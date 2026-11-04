@@ -32,6 +32,10 @@ const elements = {
   sourceStatus: document.getElementById("sourceStatus"),
   takeoffTime: document.getElementById("takeoffTime"),
   themeToggle: document.getElementById("themeToggle"),
+  followDrone: document.getElementById("followDrone"),
+  cloudsToggle: document.getElementById("cloudsToggle"),
+  cloudStatus: document.getElementById("cloudStatus"),
+  missionAlert: document.getElementById("missionAlert"),
   waypointCount: document.getElementById("waypointCount"),
   waypointList: document.getElementById("waypointList"),
   uploadZone: document.getElementById("uploadZone")
@@ -45,7 +49,20 @@ const state = {
   requestId: 0,
   forecastController: null,
   selectedWaypoint: null,
-  forecasts: null
+  forecasts: null,
+  cloudController: null,
+  cloudRefreshTimer: null,
+  cloudCooldownTimer: null,
+  cloudOverlay: null,
+  lastCloudFetchAt: 0,
+  cloudsVisible: true,
+  followDrone: false,
+  lastMissionEventCheckAt: null,
+  notifiedMissionEvents: new Set(),
+  missionAlertQueue: [],
+  missionAlertActive: false,
+  missionAlertTimer: null,
+  notificationAudioContext: null
 };
 
 const map = L.map("map", { zoomControl: false, preferCanvas: true }).setView(DEFAULT_CENTER, 6);
@@ -54,6 +71,8 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 19,
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
 }).addTo(map);
+map.createPane("cloudPane");
+map.getPane("cloudPane").style.zIndex = "250";
 
 function getSavedTheme() {
   try {
@@ -71,6 +90,215 @@ function applyTheme(theme) {
   elements.themeToggle.setAttribute("aria-label", `Switch to ${isDark ? "light" : "dark"} mode`);
   elements.themeToggle.title = `Switch to ${isDark ? "light" : "dark"} mode`;
   document.querySelector('meta[name="theme-color"]').content = isDark ? "#111923" : "#f5f7fa";
+}
+
+async function refreshCloudCover() {
+  if (!state.cloudsVisible) return;
+  const waitTime = 20000 - (Date.now() - state.lastCloudFetchAt);
+  if (waitTime > 0) {
+    if (!state.cloudCooldownTimer) {
+      state.cloudCooldownTimer = window.setTimeout(() => {
+        state.cloudCooldownTimer = null;
+        refreshCloudCover();
+      }, waitTime);
+    }
+    return;
+  }
+  state.lastCloudFetchAt = Date.now();
+  if (state.cloudController) state.cloudController.abort();
+  const controller = new AbortController();
+  state.cloudController = controller;
+  elements.cloudStatus.textContent = "Loading current clouds…";
+
+  const bounds = map.getBounds();
+  const rows = 17;
+  const columns = 17;
+  const south = Math.max(-85, bounds.getSouth());
+  const north = Math.min(85, bounds.getNorth());
+  const west = bounds.getWest();
+  const east = bounds.getEast();
+  const latitudeStep = (north - south) / rows;
+  const longitudeStep = (east - west) / columns;
+  if (latitudeStep <= 0 || longitudeStep <= 0) {
+    elements.cloudStatus.textContent = "Cloud cover unavailable at this map extent";
+    return;
+  }
+
+  const cells = [];
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const cellSouth = south + row * latitudeStep;
+      const cellWest = west + column * longitudeStep;
+      cells.push({
+        lat: cellSouth + latitudeStep / 2,
+        lon: cellWest + longitudeStep / 2,
+        bounds: [[cellSouth, cellWest], [cellSouth + latitudeStep, cellWest + longitudeStep]]
+      });
+    }
+  }
+
+  const params = new URLSearchParams({
+    latitude: cells.map(cell => cell.lat.toFixed(3)).join(","),
+    longitude: cells.map(cell => cell.lon.toFixed(3)).join(","),
+    current: "cloud_cover",
+    timezone: "auto"
+  });
+  try {
+    const response = await fetch(`${API_BASE}?${params.toString()}`, { signal: controller.signal });
+    if (!response.ok) throw new Error(`Open-Meteo returned ${response.status}.`);
+    const data = await response.json();
+    const locations = Array.isArray(data) ? data : [data];
+    if (locations.length !== cells.length) throw new Error("The cloud API returned an unexpected number of map locations.");
+    if (locations.some(location => !Number.isFinite(location.current?.cloud_cover))) {
+      throw new Error("The cloud API did not return current cloud cover for every map location.");
+    }
+
+    const coverValues = locations.map(location => location.current.cloud_cover);
+    const canvas = document.createElement("canvas");
+    const rasterSize = 512;
+    canvas.width = rasterSize;
+    canvas.height = rasterSize;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("This browser cannot render the cloud-cover layer.");
+    const image = context.createImageData(rasterSize, rasterSize);
+
+    for (let y = 0; y < rasterSize; y += 1) {
+      const gridY = y / (rasterSize - 1) * (rows - 1);
+      const row = Math.min(rows - 2, Math.floor(gridY));
+      const rowAmount = gridY - row;
+      for (let x = 0; x < rasterSize; x += 1) {
+        const gridX = x / (rasterSize - 1) * (columns - 1);
+        const column = Math.min(columns - 2, Math.floor(gridX));
+        const columnAmount = gridX - column;
+        const topLeft = coverValues[row * columns + column];
+        const topRight = coverValues[row * columns + column + 1];
+        const bottomLeft = coverValues[(row + 1) * columns + column];
+        const bottomRight = coverValues[(row + 1) * columns + column + 1];
+        const top = topLeft + (topRight - topLeft) * columnAmount;
+        const bottom = bottomLeft + (bottomRight - bottomLeft) * columnAmount;
+        const cover = Math.max(0, Math.min(100, top + (bottom - top) * rowAmount));
+        const pixel = (y * rasterSize + x) * 4;
+        image.data[pixel] = 229;
+        image.data[pixel + 1] = 238;
+        image.data[pixel + 2] = 244;
+        image.data[pixel + 3] = Math.round((cover / 100) ** 1.15 * 180);
+      }
+    }
+
+    context.putImageData(image, 0, 0);
+    if (state.cloudOverlay) state.cloudOverlay.remove();
+    state.cloudOverlay = L.imageOverlay(canvas.toDataURL("image/png"), [[south, west], [north, east]], {
+      pane: "cloudPane",
+      opacity: 0.9,
+      interactive: false
+    }).addTo(map);
+    const forecastTime = locations[0]?.current?.time;
+    const timeLabel = forecastTime ? new Date(forecastTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+    elements.cloudStatus.textContent = `Current cloud cover · Open-Meteo${timeLabel ? ` · ${timeLabel}` : ""}`;
+  } catch (error) {
+    if (error.name === "AbortError") return;
+    console.error("Could not retrieve current cloud cover:", error);
+    elements.cloudStatus.textContent = "Current cloud cover unavailable";
+  }
+}
+
+function scheduleCloudRefresh() {
+  if (!state.cloudsVisible) return;
+  window.clearTimeout(state.cloudRefreshTimer);
+  state.cloudRefreshTimer = window.setTimeout(refreshCloudCover, 500);
+}
+
+function resetMissionAlerts() {
+  state.lastMissionEventCheckAt = Date.now();
+  state.notifiedMissionEvents.clear();
+  state.missionAlertQueue = [];
+  state.missionAlertActive = false;
+  window.clearTimeout(state.missionAlertTimer);
+  elements.missionAlert.hidden = true;
+}
+
+function showNextMissionAlert() {
+  const message = state.missionAlertQueue.shift();
+  if (!message) {
+    state.missionAlertActive = false;
+    elements.missionAlert.hidden = true;
+    return;
+  }
+  state.missionAlertActive = true;
+  elements.missionAlert.textContent = message;
+  elements.missionAlert.hidden = false;
+  state.missionAlertTimer = window.setTimeout(() => {
+    state.missionAlertActive = false;
+    showNextMissionAlert();
+  }, 4000);
+}
+
+function notifyMissionEvent(eventId, message) {
+  if (state.notifiedMissionEvents.has(eventId)) return;
+  state.notifiedMissionEvents.add(eventId);
+  state.missionAlertQueue.push(message);
+  if (!state.missionAlertActive) showNextMissionAlert();
+  playNotificationTone();
+}
+
+function prepareNotificationAudio() {
+  const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextConstructor) return;
+  try {
+    if (!state.notificationAudioContext) state.notificationAudioContext = new AudioContextConstructor();
+    state.notificationAudioContext.resume().catch(error => {
+      console.warn("Could not enable mission notification sounds:", error);
+    });
+  } catch (error) {
+    console.warn("Could not enable mission notification sounds:", error);
+  }
+}
+
+function playNotificationTone() {
+  const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextConstructor) {
+    console.warn("Notification sounds are not supported by this browser.");
+    return;
+  }
+  try {
+    if (!state.notificationAudioContext) state.notificationAudioContext = new AudioContextConstructor();
+    const audio = state.notificationAudioContext;
+    const playTone = (frequency, startTime, duration) => {
+      const oscillator = audio.createOscillator();
+      const gain = audio.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.value = frequency;
+      gain.gain.setValueAtTime(0.0001, startTime);
+      gain.gain.exponentialRampToValueAtTime(0.18, startTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+      oscillator.connect(gain);
+      gain.connect(audio.destination);
+      oscillator.start(startTime);
+      oscillator.stop(startTime + duration);
+    };
+    audio.resume().then(() => {
+      const startTime = audio.currentTime + 0.03;
+      playTone(880, startTime, 0.16);
+      playTone(1175, startTime + 0.2, 0.22);
+    }).catch(error => console.warn("Could not play the mission notification sound:", error));
+  } catch (error) {
+    console.warn("Could not play the mission notification sound:", error);
+  }
+}
+
+function checkMissionAlerts(now) {
+  const previousCheck = state.lastMissionEventCheckAt;
+  state.lastMissionEventCheckAt = now;
+  if (!Number.isFinite(previousCheck) || now < previousCheck) return;
+  state.waypoints.forEach((waypoint, index) => {
+    if (!Number.isFinite(waypoint.etaTimestamp) || waypoint.etaTimestamp <= previousCheck || waypoint.etaTimestamp > now) return;
+    const name = waypoint.name || `Waypoint ${index + 1}`;
+    notifyMissionEvent(`waypoint:${waypoint.id}`, `Estimated waypoint reached: ${name}.`);
+    if (waypoint.dropActionCount > 0) {
+      const count = waypoint.dropActionCount > 1 ? ` (${waypoint.dropActionCount} actions)` : "";
+      notifyMissionEvent(`drop:${waypoint.id}`, `Estimated drop at ${name}${count}.`);
+    }
+  });
 }
 
 applyTheme(getSavedTheme());
@@ -532,6 +760,7 @@ async function fetchForecastForMission() {
     state.waypoints.forEach(waypoint => {
       waypoint.altitudeNote = waypoint.wind.note;
     });
+    resetMissionAlerts();
     renderWaypoints();
     drawWindIndicators();
     const forecastLabel = state.waypoints[0].forecastTime;
@@ -634,10 +863,14 @@ function updateDronePosition() {
       state.droneMarker.remove();
       state.droneMarker = null;
     }
+    state.followDrone = false;
+    elements.followDrone.checked = false;
+    elements.followDrone.disabled = true;
     return;
   }
 
   const now = Date.now();
+  checkMissionAlerts(now);
   let position = { lat: first.lat, lon: first.lon };
   let bearing = 0;
   let status = now < first.etaTimestamp ? "UPCOMING" : "IN FLIGHT";
@@ -691,6 +924,10 @@ function updateDronePosition() {
     }).addTo(map);
   } else {
     state.droneMarker.setLatLng([position.lat, position.lon]);
+  }
+  elements.followDrone.disabled = false;
+  if (state.followDrone && map.getCenter().distanceTo([position.lat, position.lon]) > 25) {
+    map.panTo([position.lat, position.lon], { animate: true, duration: 0.35 });
   }
 
   const markerElement = state.droneMarker.getElement();
@@ -784,6 +1021,12 @@ function cancelForecastRequest() {
   state.requestId += 1;
   state.forecastController = null;
   state.forecasts = null;
+  state.lastMissionEventCheckAt = null;
+  state.notifiedMissionEvents.clear();
+  state.missionAlertQueue = [];
+  state.missionAlertActive = false;
+  window.clearTimeout(state.missionAlertTimer);
+  elements.missionAlert.hidden = true;
   state.waypoints.forEach(waypoint => {
     waypoint.wind = null;
     waypoint.gust = null;
@@ -895,10 +1138,36 @@ map.on("mousemove", event => {
 map.on("mouseout", () => {
   if (!state.waypoints.length) elements.mapCoordinates.textContent = "Move over the map to see coordinates";
 });
+map.on("moveend", scheduleCloudRefresh);
 
-elements.analyzeButton.addEventListener("click", fetchForecastForMission);
+elements.analyzeButton.addEventListener("click", () => {
+  prepareNotificationAudio();
+  fetchForecastForMission();
+});
 elements.clearMission.addEventListener("click", clearMission);
 elements.exportButton.addEventListener("click", exportCsv);
+elements.followDrone.addEventListener("change", () => {
+  state.followDrone = elements.followDrone.checked;
+  if (state.followDrone && state.droneMarker) {
+    map.panTo(state.droneMarker.getLatLng(), { animate: true, duration: 0.35 });
+  }
+});
+elements.cloudsToggle.addEventListener("click", () => {
+  state.cloudsVisible = !state.cloudsVisible;
+  elements.cloudsToggle.setAttribute("aria-pressed", String(state.cloudsVisible));
+  elements.cloudsToggle.title = `${state.cloudsVisible ? "Hide" : "Show"} current cloud cover`;
+  elements.cloudStatus.hidden = !state.cloudsVisible;
+  if (state.cloudsVisible) {
+    scheduleCloudRefresh();
+  } else {
+    window.clearTimeout(state.cloudRefreshTimer);
+    window.clearTimeout(state.cloudCooldownTimer);
+    state.cloudCooldownTimer = null;
+    if (state.cloudController) state.cloudController.abort();
+    if (state.cloudOverlay) state.cloudOverlay.remove();
+    elements.cloudStatus.textContent = "Cloud cover hidden";
+  }
+});
 elements.missionFile.addEventListener("change", event => loadMissionFile(event.target.files[0]));
 document.getElementById("searchForm").addEventListener("submit", searchLocation);
 elements.waypointList.addEventListener("click", event => {
@@ -954,6 +1223,7 @@ function refreshMissionEstimates() {
     state.waypoints.forEach(waypoint => {
       waypoint.altitudeNote = waypoint.wind.note;
     });
+    resetMissionAlerts();
     renderWaypoints();
     drawWindIndicators();
   } catch (error) {
@@ -969,4 +1239,6 @@ elements.takeoffTime.addEventListener("change", () => {
 elements.takeoffTime.value = localDateTimeValue(new Date());
 updateMissionSummary();
 renderWaypoints();
+scheduleCloudRefresh();
 window.setInterval(updateDronePosition, 1000);
+window.setInterval(refreshCloudCover, 15 * 60 * 1000);
