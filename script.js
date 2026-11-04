@@ -17,7 +17,8 @@ const elements = {
   clearMission: document.getElementById("clearMission"),
   emptyState: document.getElementById("emptyState"),
   exportButton: document.getElementById("exportButton"),
-  forecastTime: document.getElementById("forecastTime"),
+  cruiseSpeed: document.getElementById("cruiseSpeed"),
+  droneModel: document.getElementById("droneModel"),
   loadingOverlay: document.getElementById("loadingOverlay"),
   loadingText: document.getElementById("loadingText"),
   locationSearch: document.getElementById("locationSearch"),
@@ -25,6 +26,7 @@ const elements = {
   message: document.getElementById("message"),
   missionFile: document.getElementById("missionFile"),
   sourceStatus: document.getElementById("sourceStatus"),
+  takeoffTime: document.getElementById("takeoffTime"),
   themeToggle: document.getElementById("themeToggle"),
   waypointCount: document.getElementById("waypointCount"),
   waypointList: document.getElementById("waypointList"),
@@ -37,7 +39,8 @@ const state = {
   routeLine: null,
   requestId: 0,
   forecastController: null,
-  selectedWaypoint: null
+  selectedWaypoint: null,
+  forecasts: null
 };
 
 const map = L.map("map", { zoomControl: false, preferCanvas: true }).setView(DEFAULT_CENTER, 6);
@@ -129,6 +132,129 @@ function nearestForecastIndex(times, selectedTime) {
   return nearest;
 }
 
+function getWindAtTime(waypoint, forecast, timestamp, homeElevation) {
+  const firstTime = new Date(`${forecast.hourly.time[0]}Z`).getTime();
+  const lastTime = new Date(`${forecast.hourly.time[forecast.hourly.time.length - 1]}Z`).getTime();
+  if (timestamp < firstTime || timestamp > lastTime) {
+    throw new Error(`The estimated arrival at ${waypoint.name || "a waypoint"} is outside the available forecast period.`);
+  }
+  const forecastIndex = nearestForecastIndex(forecast.hourly.time, new Date(timestamp).toISOString());
+  const targetAltitude = altitudeAboveGround(waypoint, forecast.elevation, homeElevation);
+  const layers = getWindLayers(forecast.hourly, forecastIndex, forecast.elevation);
+  const wind = estimateWind(layers, targetAltitude);
+  return {
+    wind,
+    gust: forecast.hourly.wind_gusts_10m?.[forecastIndex] ?? null,
+    forecastTime: forecast.hourly.time[forecastIndex],
+    targetAltitude,
+    groundElevation: forecast.elevation
+  };
+}
+
+function distanceAndBearing(from, to) {
+  const radians = Math.PI / 180;
+  const fromLat = from.lat * radians;
+  const toLat = to.lat * radians;
+  const latitudeDelta = (to.lat - from.lat) * radians;
+  const longitudeDelta = (to.lon - from.lon) * radians;
+  const haversine = Math.sin(latitudeDelta / 2) ** 2
+    + Math.cos(fromLat) * Math.cos(toLat) * Math.sin(longitudeDelta / 2) ** 2;
+  const distance = 6371000 * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+  const bearing = (Math.atan2(
+    Math.sin(longitudeDelta) * Math.cos(toLat),
+    Math.cos(fromLat) * Math.sin(toLat) - Math.sin(fromLat) * Math.cos(toLat) * Math.cos(longitudeDelta)
+  ) * 180 / Math.PI + 360) % 360;
+  return { distance, bearing };
+}
+
+function estimateGroundSpeed(cruiseSpeed, wind, bearing) {
+  const windVector = windComponents(wind.speed, wind.direction);
+  const radians = bearing * Math.PI / 180;
+  const tailwind = windVector.east * Math.sin(radians) + windVector.north * Math.cos(radians);
+  const crosswind = windVector.east * Math.cos(radians) - windVector.north * Math.sin(radians);
+  if (Math.abs(crosswind) >= cruiseSpeed) return { speed: null, note: "Crosswind exceeds cruise speed; track cannot be maintained." };
+  const speed = Math.sqrt(cruiseSpeed ** 2 - crosswind ** 2) + tailwind;
+  if (speed <= 0) return { speed: null, note: "Headwind prevents forward progress at cruise speed." };
+  return { speed, note: "" };
+}
+
+function formatArrivalTime(timestamp) {
+  return new Date(timestamp).toLocaleString([], {
+    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
+  });
+}
+
+function updateWaypointEstimates(forecasts) {
+  const takeoffTimestamp = new Date(elements.takeoffTime.value).getTime();
+  if (!Number.isFinite(takeoffTimestamp)) throw new Error("Choose a valid takeoff date and time.");
+  const cruiseSpeed = Number(elements.cruiseSpeed.value);
+  const hasCruiseSpeed = Number.isFinite(cruiseSpeed) && cruiseSpeed > 0;
+  const home = state.waypoints.find(point => point.sequence === 0) || state.waypoints[0];
+  const homeElevation = forecasts[state.waypoints.indexOf(home)].elevation;
+  let previousArrival = takeoffTimestamp;
+  const estimates = [];
+
+  state.waypoints.forEach((waypoint, index) => {
+    let arrivalTimestamp = index === 0 ? takeoffTimestamp : null;
+    let groundSpeed = null;
+    let estimateNote = index === 0 ? "Mission start" : "";
+    let sample;
+
+    if (index > 0 && !hasCruiseSpeed) {
+      estimateNote = "Enter cruise speed to estimate arrival.";
+    } else if (index > 0 && !Number.isFinite(previousArrival)) {
+      estimateNote = "Cannot estimate after an unreachable leg.";
+    } else if (index > 0) {
+      const { distance, bearing } = distanceAndBearing(state.waypoints[index - 1], waypoint);
+      let candidateArrival = previousArrival + distance / cruiseSpeed * 1000;
+      let segmentEstimate;
+      for (let iteration = 0; iteration < 4; iteration += 1) {
+        sample = getWindAtTime(waypoint, forecasts[index], candidateArrival, homeElevation);
+        segmentEstimate = estimateGroundSpeed(cruiseSpeed, sample.wind, bearing);
+        if (!Number.isFinite(segmentEstimate.speed)) break;
+        const revisedArrival = previousArrival + distance / segmentEstimate.speed * 1000;
+        if (Math.abs(revisedArrival - candidateArrival) < 60000) {
+          candidateArrival = revisedArrival;
+          break;
+        }
+        candidateArrival = revisedArrival;
+      }
+
+      if (segmentEstimate && Number.isFinite(segmentEstimate.speed)) {
+        sample = getWindAtTime(waypoint, forecasts[index], candidateArrival, homeElevation);
+        segmentEstimate = estimateGroundSpeed(cruiseSpeed, sample.wind, bearing);
+      }
+      if (segmentEstimate && Number.isFinite(segmentEstimate.speed)) {
+        groundSpeed = segmentEstimate.speed;
+        arrivalTimestamp = previousArrival + distance / groundSpeed * 1000;
+      } else {
+        estimateNote = segmentEstimate?.note || "Could not estimate ground speed for this leg.";
+      }
+    }
+
+    if (!sample) {
+      sample = getWindAtTime(
+        waypoint,
+        forecasts[index],
+        Number.isFinite(arrivalTimestamp) ? arrivalTimestamp : takeoffTimestamp,
+        homeElevation
+      );
+    }
+    estimates.push({
+      wind: sample.wind,
+      gust: sample.gust,
+      forecastTime: sample.forecastTime,
+      targetAltitudeAgl: sample.targetAltitude,
+      groundElevation: sample.groundElevation,
+      etaTimestamp: arrivalTimestamp,
+      groundSpeed,
+      estimateNote
+    });
+    previousArrival = arrivalTimestamp;
+  });
+  state.waypoints.forEach((waypoint, index) => Object.assign(waypoint, estimates[index]));
+}
+
 function parseWaypointsFile(text, fileName) {
   const trimmed = text.trim();
   if (!trimmed) throw new Error("The selected file is empty.");
@@ -141,19 +267,25 @@ function parseWaypointsFile(text, fileName) {
     }
     const items = plan.mission && Array.isArray(plan.mission.items) ? plan.mission.items : null;
     if (!items) throw new Error("No QGroundControl mission items were found in this .plan file.");
-    const points = items.map((item, index) => {
+    const points = [];
+    items.forEach((item, index) => {
       const command = Number(item.command ?? 16);
-      if (!NAV_COMMANDS.has(command)) return null;
+      if (command === 183) {
+        const previousWaypoint = points[points.length - 1];
+        if (previousWaypoint) previousWaypoint.dropActionCount += 1;
+        return;
+      }
+      if (!NAV_COMMANDS.has(command)) return;
       const coordinate = Array.isArray(item.coordinate)
         ? item.coordinate
         : Array.isArray(item.params) && item.params.length >= 7 ? item.params.slice(4, 7) : null;
-      if (!coordinate || coordinate.length < 3) return null;
+      if (!coordinate || coordinate.length < 3) return;
       const frame = Number(item.frame ?? 3);
       const rawMode = typeof item.AltitudeMode === "string" ? item.AltitudeMode.toLowerCase() : "";
       const altitudeMode = rawMode.includes("absolute") || frame === 0 || frame === 5
         ? "absolute"
         : rawMode.includes("terrain") || frame === 6 || frame === 10 ? "terrain" : "relative";
-      return makeWaypoint({
+      const waypoint = makeWaypoint({
         lat: Number(coordinate[0]),
         lon: Number(coordinate[1]),
         altitude: Number(coordinate[2]),
@@ -163,7 +295,8 @@ function parseWaypointsFile(text, fileName) {
         name: command === 22 ? "Takeoff" : command === 21 ? "Land" : `Waypoint ${item.sequence ?? item.doJumpId ?? index + 1}`,
         altitudeMode
       });
-    }).filter(Boolean);
+      if (waypoint) points.push(waypoint);
+    });
     if (!points.length) throw new Error("No GPS waypoint coordinates were found in this .plan file.");
     return points;
   }
@@ -177,6 +310,11 @@ function parseWaypointsFile(text, fileName) {
     const sequence = Number(fields[0]);
     const frame = Number(fields[2]);
     const command = Number(fields[3]);
+    if (command === 183) {
+      const previousWaypoint = points[points.length - 1];
+      if (previousWaypoint) previousWaypoint.dropActionCount += 1;
+      continue;
+    }
     const lat = Number(fields[8]);
     const lon = Number(fields[9]);
     const altitude = Number(fields[10]);
@@ -199,7 +337,9 @@ function makeWaypoint({ lat, lon, altitude = 100, frame = 3, sequence, command =
   return {
     id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
     lat, lon, altitude, frame, sequence, command, name, altitudeMode,
-    wind: null, gust: null, forecastTime: null, sampledAltitude: null, altitudeNote: ""
+    dropActionCount: 0,
+    wind: null, gust: null, forecastTime: null, sampledAltitude: null, altitudeNote: "",
+    etaTimestamp: null, groundSpeed: null, estimateNote: ""
   };
 }
 
@@ -247,7 +387,9 @@ function estimateWind(layers, targetAltitude) {
 }
 
 function formatForecastTime(value) {
-  return new Date(value).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return new Date(`${value}Z`).toLocaleString([], {
+    timeZone: "UTC", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
+  });
 }
 
 function batchApiUrl(points) {
@@ -280,8 +422,6 @@ async function fetchForecastForMission() {
   if (state.forecastController) state.forecastController.abort();
   state.forecastController = new AbortController();
   const { signal } = state.forecastController;
-  const forecastDate = elements.forecastTime.value ? new Date(elements.forecastTime.value) : new Date();
-  const requestedTimestamp = forecastDate.toISOString();
   setMessage("");
   elements.loadingOverlay.hidden = false;
   elements.loadingText.textContent = `Fetching ${state.waypoints.length} altitude-specific forecast${state.waypoints.length === 1 ? "" : "s"}…`;
@@ -290,6 +430,8 @@ async function fetchForecastForMission() {
   state.waypoints.forEach(waypoint => {
     waypoint.wind = null;
     waypoint.gust = null;
+    waypoint.etaTimestamp = null;
+    waypoint.groundSpeed = null;
   });
   renderWaypoints();
   try {
@@ -300,31 +442,29 @@ async function fetchForecastForMission() {
     const forecastBatches = await Promise.all(batches.map(batch => fetchForecastBatch(batch, signal)));
     if (requestId !== state.requestId) return;
     const forecasts = forecastBatches.flat();
-    const home = state.waypoints.find(point => point.sequence === 0) || state.waypoints[0];
-    const homeForecast = forecasts[state.waypoints.indexOf(home)];
-    const homeIndex = nearestForecastIndex(homeForecast.hourly.time, requestedTimestamp);
-    const homeElevation = homeForecast.elevation;
-    const forecastLabel = homeForecast.hourly.time[homeIndex];
-
-    state.waypoints.forEach((waypoint, index) => {
-      const forecast = forecasts[index];
-      const forecastIndex = nearestForecastIndex(forecast.hourly.time, requestedTimestamp);
-      const targetAltitude = altitudeAboveGround(waypoint, forecast.elevation, homeElevation);
-      const layers = getWindLayers(forecast.hourly, forecastIndex, forecast.elevation);
-      const wind = estimateWind(layers, targetAltitude);
-      waypoint.wind = wind;
-      waypoint.gust = forecast.hourly.wind_gusts_10m?.[forecastIndex] ?? null;
-      waypoint.forecastTime = forecast.hourly.time[forecastIndex];
-      waypoint.targetAltitudeAgl = targetAltitude;
-      waypoint.groundElevation = forecast.elevation;
-      waypoint.altitudeNote = wind.note;
+    state.forecasts = forecasts;
+    updateWaypointEstimates(forecasts);
+    state.waypoints.forEach(waypoint => {
+      waypoint.altitudeNote = waypoint.wind.note;
     });
     renderWaypoints();
     drawWindIndicators();
+    const forecastLabel = state.waypoints[0].forecastTime;
     setSourceStatus(`Forecast · ${formatForecastTime(forecastLabel)} UTC`, "ready");
-    elements.mapCoordinates.textContent = `${state.waypoints.length} waypoint${state.waypoints.length === 1 ? "" : "s"} · wind estimated at mission altitude`;
+    elements.mapCoordinates.textContent = `${state.waypoints.length} waypoint${state.waypoints.length === 1 ? "" : "s"} · wind sampled at estimated arrival`;
   } catch (error) {
     if (error.name === "AbortError" || requestId !== state.requestId) return;
+    state.forecasts = null;
+    state.waypoints.forEach(waypoint => {
+      waypoint.wind = null;
+      waypoint.gust = null;
+      waypoint.forecastTime = null;
+      waypoint.etaTimestamp = null;
+      waypoint.groundSpeed = null;
+      waypoint.estimateNote = "";
+      waypoint.altitudeNote = "";
+    });
+    renderWaypoints();
     console.error("Could not retrieve the wind forecast:", error);
     setMessage(`Could not load the forecast. ${error.message}`, true);
     setSourceStatus("Forecast unavailable — check your connection", "error");
@@ -343,13 +483,16 @@ function waypointNumber(waypoint, index) {
 function markerIcon(waypoint, index, selected) {
   const number = waypointNumber(waypoint, index);
   const gust = Number.isFinite(waypoint.gust) ? `${waypoint.gust.toFixed(1)} m/s` : null;
+  const estimate = Number.isFinite(waypoint.etaTimestamp)
+    ? `<div class="map-estimate-label"><span>ARR ${formatArrivalTime(waypoint.etaTimestamp)}</span>${waypoint.dropActionCount ? `<span>DROP ${formatArrivalTime(waypoint.etaTimestamp)}</span>` : ""}</div>`
+    : "";
   const wind = waypoint.wind
     ? `<div class="map-wind-label" title="Wind ${waypoint.wind.speed.toFixed(1)} m/s from ${Math.round(waypoint.wind.direction)}°${gust ? `; 10 m gust ${gust}` : ""}"><span class="map-wind-arrow" style="transform:rotate(${(waypoint.wind.direction + 180) % 360}deg)">↑</span><span>${waypoint.wind.speed.toFixed(1)} m/s</span><span class="map-wind-direction">from ${Math.round(waypoint.wind.direction)}°</span>${gust ? `<span class="map-wind-gust">gust ${gust}</span>` : ""}</div>`
     : "";
   return L.divIcon({
     className: `waypoint-marker${selected ? " selected" : ""}`,
-    html: `<div class="map-waypoint-label"><div class="waypoint-marker-inner"><span>${number}</span></div>${wind}</div>`,
-    iconSize: [285, 38],
+    html: `<div class="map-waypoint-label"><div class="map-waypoint-top"><div class="waypoint-marker-inner"><span>${number}</span></div>${wind}</div>${estimate}</div>`,
+    iconSize: [390, 76],
     iconAnchor: [14, 33]
   });
 }
@@ -382,7 +525,10 @@ function popupContent(waypoint, index) {
   const wind = waypoint.wind
     ? `<div class="popup-wind">${waypoint.wind.speed.toFixed(1)} m/s · wind from ${Math.round(waypoint.wind.direction)}° (${describeWindDirection(waypoint.wind.direction)})</div><div class="popup-detail">10 m gust: ${gust}</div><div class="popup-detail">Wind altitude: ${waypoint.targetAltitudeAgl.toFixed(0)} m AGL · forecast level ${waypoint.wind.altitude.toFixed(0)} m</div>`
     : '<div class="popup-detail">Wind forecast not loaded</div>';
-  return `<div class="popup-title">${escapeHtml(waypoint.name || `Waypoint ${index + 1}`)}</div><div class="popup-detail">${waypoint.lat.toFixed(5)}, ${waypoint.lon.toFixed(5)}</div><div class="popup-detail">Mission altitude: ${waypoint.altitude} m</div>${wind}`;
+  const estimate = Number.isFinite(waypoint.etaTimestamp)
+    ? `<div class="popup-detail">Estimated arrival: ${formatArrivalTime(waypoint.etaTimestamp)}</div>${waypoint.dropActionCount ? `<div class="popup-detail">Estimated drop: ${formatArrivalTime(waypoint.etaTimestamp)} (${waypoint.dropActionCount} DO_SET_SERVO action${waypoint.dropActionCount === 1 ? "" : "s"})</div>` : ""}<div class="popup-detail">Wind sample: ${formatForecastTime(waypoint.forecastTime)} UTC</div><div class="popup-detail">Ground speed: ${Number.isFinite(waypoint.groundSpeed) ? `${waypoint.groundSpeed.toFixed(1)} m/s` : "Mission start"}</div>`
+    : waypoint.estimateNote ? `<div class="popup-detail">${escapeHtml(waypoint.estimateNote)}</div>` : "";
+  return `<div class="popup-title">${escapeHtml(waypoint.name || `Waypoint ${index + 1}`)}</div><div class="popup-detail">${waypoint.lat.toFixed(5)}, ${waypoint.lon.toFixed(5)}</div><div class="popup-detail">Mission altitude: ${waypoint.altitude} m</div>${estimate}${wind}`;
 }
 
 function drawWindIndicators() {
@@ -415,6 +561,9 @@ function renderWaypoints() {
     const gustMarkup = waypoint.wind
       ? `<div class="gust-result">10 m gust: ${Number.isFinite(waypoint.gust) ? `${waypoint.gust.toFixed(1)} m/s` : "Unavailable"}</div>`
       : "";
+    const estimateMarkup = Number.isFinite(waypoint.etaTimestamp)
+      ? `<div class="estimate-result"><span>ETA ${formatArrivalTime(waypoint.etaTimestamp)}</span><span>Wind sample ${formatForecastTime(waypoint.forecastTime)} UTC</span><span>${Number.isFinite(waypoint.groundSpeed) ? `${waypoint.groundSpeed.toFixed(1)} m/s ground speed` : "Mission start"}</span></div>`
+      : waypoint.estimateNote ? `<div class="estimate-result pending">${escapeHtml(waypoint.estimateNote)}</div>` : "";
     return `<article class="waypoint-card${waypoint.id === state.selectedWaypoint ? " selected" : ""}" data-id="${waypoint.id}">
       <div class="waypoint-top">
         <span class="waypoint-badge">${waypointNumber(waypoint, index)}</span>
@@ -424,7 +573,7 @@ function renderWaypoints() {
       <div class="altitude-row">
         <label class="altitude-edit">ALT <input type="number" step="1" value="${escapeHtml(waypoint.altitude)}" data-action="altitude" aria-label="Waypoint ${waypointNumber(waypoint, index)} altitude in meters"> m</label>
         <span class="wind-result${waypoint.wind ? "" : " pending"}">${windMarkup}</span>
-      </div>${altitudeNote}${gustMarkup}
+      </div>${altitudeNote}${gustMarkup}${estimateMarkup}
     </article>`;
   }).join("");
   renderMap();
@@ -464,6 +613,16 @@ function cancelForecastRequest() {
   if (state.forecastController) state.forecastController.abort();
   state.requestId += 1;
   state.forecastController = null;
+  state.forecasts = null;
+  state.waypoints.forEach(waypoint => {
+    waypoint.wind = null;
+    waypoint.gust = null;
+    waypoint.forecastTime = null;
+    waypoint.etaTimestamp = null;
+    waypoint.groundSpeed = null;
+    waypoint.estimateNote = "";
+    waypoint.altitudeNote = "";
+  });
   elements.loadingOverlay.hidden = true;
   elements.analyzeButton.disabled = state.waypoints.length === 0;
   if (state.waypoints.length) setSourceStatus("Route changed — check winds again");
@@ -478,8 +637,11 @@ function zoomToMission() {
 
 function exportCsv() {
   const rows = [
-    ["Waypoint", "Latitude", "Longitude", "Mission altitude (m)", "Altitude above ground (m)", "Ground elevation (m)", "Wind speed (m/s)", "Wind gust at 10 m (m/s)", "Wind direction (degrees from north)", "Wind direction", "Forecast time UTC"],
+    ["Drone", "Cruise speed (m/s)", "Takeoff time", "Waypoint", "Latitude", "Longitude", "Mission altitude (m)", "Altitude above ground (m)", "Ground elevation (m)", "Wind speed (m/s)", "Wind gust at 10 m (m/s)", "Wind direction (degrees from north)", "Wind direction", "Ground speed (m/s)", "Estimated arrival", "Forecast time UTC"],
     ...state.waypoints.map((point, index) => [
+      elements.droneModel.value.trim(),
+      elements.cruiseSpeed.value,
+      elements.takeoffTime.value ? `${new Date(elements.takeoffTime.value).toISOString().replace("T", " ").slice(0, 16)} UTC` : "",
       point.name || `Waypoint ${index + 1}`,
       point.lat.toFixed(6),
       point.lon.toFixed(6),
@@ -490,6 +652,8 @@ function exportCsv() {
       Number.isFinite(point.gust) ? point.gust.toFixed(2) : "",
       point.wind ? Math.round(point.wind.direction) : "",
       point.wind ? describeWindDirection(point.wind.direction) : "",
+      Number.isFinite(point.groundSpeed) ? point.groundSpeed.toFixed(2) : "",
+      Number.isFinite(point.etaTimestamp) ? `${new Date(point.etaTimestamp).toISOString().replace("T", " ").slice(0, 16)} UTC` : "",
       point.forecastTime ? `${point.forecastTime.replace("T", " ")} UTC` : ""
     ])
   ];
@@ -610,11 +774,31 @@ document.getElementById("locateButton").addEventListener("click", () => {
     { enableHighAccuracy: true, timeout: 10000 }
   );
 });
-elements.forecastTime.addEventListener("change", () => {
-  if (state.waypoints.length && (state.waypoints.some(waypoint => waypoint.wind) || !elements.loadingOverlay.hidden)) {
-    fetchForecastForMission();
+function refreshMissionEstimates() {
+  if (!state.forecasts) return;
+  try {
+    setMessage("");
+    updateWaypointEstimates(state.forecasts);
+    state.waypoints.forEach(waypoint => {
+      waypoint.altitudeNote = waypoint.wind.note;
+    });
+    renderWaypoints();
+    drawWindIndicators();
+  } catch (error) {
+    console.error("Could not update waypoint estimates:", error);
+    setMessage(error.message, true);
   }
+}
+
+elements.takeoffTime.addEventListener("change", refreshMissionEstimates);
+elements.cruiseSpeed.addEventListener("change", () => {
+  const value = Number(elements.cruiseSpeed.value);
+  if (elements.cruiseSpeed.value && (!Number.isFinite(value) || value <= 0)) {
+    setMessage("Cruise speed must be greater than zero meters per second.", true);
+    return;
+  }
+  refreshMissionEstimates();
 });
 
-elements.forecastTime.value = localDateTimeValue(new Date());
+elements.takeoffTime.value = localDateTimeValue(new Date());
 renderWaypoints();

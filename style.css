@@ -149,6 +149,12 @@ button { color: inherit; }
 .live-pill > span { width: 5px; height: 5px; background: #2ab489; border-radius: 50%; box-shadow: 0 0 0 2px #d5f0e5; }
 .field-label { display: flex; justify-content: space-between; margin: 15px 0 7px; color: #6f7d90; font-size: 9px; font-weight: 700; }
 .field-label > span { color: #a3acb8; font-size: 7px; letter-spacing: .7px; }
+.simple-field { display: flex; align-items: center; height: 36px; padding: 0 10px; border: 1px solid #e6ebf0; border-radius: 7px; }
+.simple-field input { width: 100%; min-width: 0; color: #49576c; background: transparent; border: 0; outline: 0; font-size: 10px; }
+.simple-field input::placeholder { color: #9aa5b2; }
+.simple-field input::-webkit-inner-spin-button,
+.simple-field input::-webkit-outer-spin-button { margin: 0; }
+.simple-field input[type="number"] { appearance: textfield; }
 .time-field { display: flex; align-items: center; height: 36px; gap: 8px; padding: 0 10px; border: 1px solid #e6ebf0; border-radius: 7px; }
 .time-field svg { width: 15px; height: 15px; flex: 0 0 15px; color: #8794a5; }
 .time-field input { width: 100%; min-width: 0; color: #49576c; background: transparent; border: 0; outline: 0; font-size: 10px; }
@@ -192,6 +198,8 @@ button { color: inherit; }
 .wind-result.pending { color: #9ea8b4; font-weight: 500; }
 .height-note { margin-top: 6px; color: #9ba5b2; font-size: 8px; }
 .gust-result { margin-top: 4px; color: #526579; font-size: 9px; font-weight: 700; }
+.estimate-result { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 8px; margin-top: 6px; padding-top: 6px; color: #26866c; border-top: 1px solid #edf0f3; font-size: 8px; font-weight: 700; }
+.estimate-result.pending { justify-content: flex-start; color: #9ba5b2; font-weight: 500; }
 .waypoint-card.selected { border-color: #85c9b2; box-shadow: 0 0 0 2px #e9f7f1; }
 .sidebar-footer { display: flex; flex-direction: column; gap: 7px; padding: 11px 29px 14px; border-top: 1px solid #f0f2f5; }
 .forecast-source { display: flex; align-items: center; gap: 7px; color: #78869a; font-size: 9px; }
@@ -241,8 +249,9 @@ button { color: inherit; }
 .popup-title { font-weight: 700; color: #34465b; }
 .popup-detail { color: #738197; }
 .popup-wind { color: #168568; font-weight: 700; }
-.waypoint-marker { width: 285px; height: 38px; background: transparent; border: 0; }
-.map-waypoint-label { display: flex; width: max-content; height: 36px; align-items: center; gap: 5px; }
+.waypoint-marker { width: 390px; height: 76px; background: transparent; border: 0; }
+.map-waypoint-label { display: flex; width: max-content; align-items: flex-start; flex-direction: column; gap: 2px; }
+.map-waypoint-top { display: flex; height: 36px; align-items: center; gap: 5px; }
 .waypoint-marker-inner { position: relative; display: grid; width: 27px; height: 27px; place-items: center; color: #fff; background: #263a50; border: 2px solid #fff; border-radius: 9px 9px 9px 2px; box-shadow: 0 2px 7px rgb(36 53 60 / 28%); font: 700 10px "DM Sans", sans-serif; transform: rotate(-45deg); }
 .waypoint-marker-inner span { transform: rotate(45deg); }
 .waypoint-marker.selected .waypoint-marker-inner { background: #199778; box-shadow: 0 0 0 4px rgb(34 156 120 / 20%), 0 2px 7px rgb(36 53 60 / 25%); }
@@ -250,6 +259,9 @@ button { color: inherit; }
 .map-wind-arrow { display: inline-block; color: #14886c; font-size: 15px; line-height: 1; }
 .map-wind-direction { padding-left: 5px; color: #178568; border-left: 1px solid #e4ebe8; font-variant-numeric: tabular-nums; }
 .map-wind-gust { padding-left: 5px; color: #526579; border-left: 1px solid #e4ebe8; }
+.map-estimate-label { display: flex; flex-wrap: wrap; gap: 4px; margin-left: 32px; }
+.map-estimate-label span { padding: 3px 6px; color: #34465b; background: rgb(255 255 255 / 96%); border: 1px solid #dfe9e5; border-radius: 5px; box-shadow: 0 2px 8px rgb(36 53 60 / 12%); font-size: 9px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.map-estimate-label span:last-child:not(:first-child) { color: #a45b20; }
 .leaflet-control-attribution { font-size: 8px !important; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -299,7 +311,7 @@ button { color: inherit; }
 .live-pill { font-size: 10px; }
 .field-label { font-size: 11px; }
 .field-label > span { font-size: 9px; }
-.time-field input { font-size: 12px; }
+.time-field input, .simple-field input { font-size: 12px; }
 .primary-button { font-size: 13px; }
 .api-note { font-size: 10px; }
 .count-badge { font-size: 11px; }
@@ -350,6 +362,7 @@ button { color: inherit; }
 :root[data-theme="dark"] .height-note { color: #a4b2c4; }
 
 :root[data-theme="dark"] .panel,
+:root[data-theme="dark"] .simple-field,
 :root[data-theme="dark"] .time-field,
 :root[data-theme="dark"] .waypoint-card,
 :root[data-theme="dark"] .map-legend,
@@ -372,6 +385,7 @@ button { color: inherit; }
 :root[data-theme="dark"] .upload-zone:hover,
 :root[data-theme="dark"] .upload-zone.dragging { background: #1a332d; border-color: #4aab8f; }
 :root[data-theme="dark"] .browse-button,
+:root[data-theme="dark"] .simple-field input,
 :root[data-theme="dark"] .time-field input,
 :root[data-theme="dark"] .search-box input,
 :root[data-theme="dark"] .altitude-edit input {
@@ -402,6 +416,8 @@ button { color: inherit; }
 :root[data-theme="dark"] .waypoint-badge,
 :root[data-theme="dark"] .waypoint-marker-inner { background-color: #34465d; }
 :root[data-theme="dark"] .waypoint-card:hover { background: #202e3d; border-color: #3d655c; }
+:root[data-theme="dark"] .estimate-result { color: #72d2b5; border-color: #303e50; }
+:root[data-theme="dark"] .estimate-result.pending { color: #94a3b6; }
 :root[data-theme="dark"] .waypoint-card.selected { border-color: #4aa98e; box-shadow: 0 0 0 2px rgb(46 164 129 / 18%); }
 :root[data-theme="dark"] .map-area,
 :root[data-theme="dark"] .leaflet-container { background: #17212d; }
@@ -422,6 +438,8 @@ button { color: inherit; }
 }
 :root[data-theme="dark"] .map-wind-direction,
 :root[data-theme="dark"] .map-wind-gust { color: #70d2b4; border-color: #405064; }
+:root[data-theme="dark"] .map-estimate-label span { color: #e3ecf4; background: rgb(25 37 51 / 96%); border-color: #405064; }
+:root[data-theme="dark"] .map-estimate-label span:last-child:not(:first-child) { color: #f0b879; }
 :root[data-theme="dark"] .leaflet-control-zoom a {
   color: #e0e9f2;
   background: #1c2837;

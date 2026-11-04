@@ -56,16 +56,24 @@
               <div><span class="step-number">02</span><h2>Wind forecast</h2></div>
               <span class="live-pill"><span></span> LIVE API</span>
             </div>
-            <label class="field-label" for="forecastTime">Forecast time <span>LOCAL TIME</span></label>
+            <label class="field-label" for="droneModel">Drone <span>MODEL</span></label>
+            <div class="simple-field">
+              <input id="droneModel" type="text" value="ELEVONX Tango 4" autocomplete="off">
+            </div>
+            <label class="field-label" for="cruiseSpeed">Cruise speed <span>M/S</span></label>
+            <div class="simple-field">
+              <input id="cruiseSpeed" type="number" min="0.1" step="0.1" placeholder="Enter cruise speed">
+            </div>
+            <label class="field-label" for="takeoffTime">Takeoff time <span>LOCAL TIME</span></label>
             <div class="time-field">
               <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M10 6v4.3l2.8 1.7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-              <input id="forecastTime" type="datetime-local">
+              <input id="takeoffTime" type="datetime-local">
             </div>
             <button id="analyzeButton" class="primary-button" type="button" disabled>
               <span class="button-label">Check waypoint winds</span>
               <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h12m0 0-5-5m5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
-            <div class="api-note"><span class="api-check">✓</span> Free forecast by <strong>Open-Meteo</strong><span class="api-separator">·</span><strong>OpenStreetMap</strong></div>
+            <div class="api-note"><span class="api-check">✓</span> Hourly wind sample at each estimated arrival · <strong>Open-Meteo</strong></div>
           </section>
 
           <section class="waypoints-section">
