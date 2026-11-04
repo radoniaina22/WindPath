@@ -68,6 +68,49 @@
             <div class="api-note"><span class="api-check">✓</span> Uses <strong>DO_CHANGE_SPEED</strong> (airspeed or groundspeed) with hourly wind</div>
           </section>
 
+          <section class="panel energy-panel" aria-labelledby="energyTitle">
+            <div class="section-heading">
+              <div><span class="step-number">03</span><h2 id="energyTitle">Battery &amp; energy</h2></div>
+              <span class="energy-battery" id="capacityBadge">12S · 60 Ah</span>
+            </div>
+            <div class="aircraft-specs">
+              <strong>ELEVONX Tango 4</strong>
+              <span>4.4 m span · 29 kg MTOW · 5 kg max payload</span>
+              <span>Reference flight: 4.3 kg payload · 36,553 mAh over 151.85 min</span>
+              <span>Log current: 14.44 A average · 35.21 A p95 · 92.19 A peak</span>
+              <span>Cruise model: 16.15 A loaded · 15.54 A empty</span>
+            </div>
+            <div class="energy-inputs">
+              <label class="energy-field" for="batteryCapacity">
+                <span>Battery capacity</span>
+                <span class="energy-input-wrap"><input id="batteryCapacity" type="number" min="1" step="100" value="60000"><span>mAh</span></span>
+              </label>
+              <label class="energy-field" for="departureVoltage">
+                <span>Departure voltage <small>measured before takeoff</small></span>
+                <span class="energy-input-wrap"><input id="departureVoltage" type="number" min="30" max="51" step="0.1" value="49.97"><span>V</span></span>
+              </label>
+              <label class="energy-field" for="defaultCruiseSpeed">
+                <span>Default cruise airspeed <small>when plan has no speed command</small></span>
+                <span class="energy-input-wrap"><input id="defaultCruiseSpeed" type="number" min="1" max="100" step="0.5" value="23"><span>m/s</span></span>
+              </label>
+              <label class="energy-field" for="payloadWeight">
+                <span>Payload weight <small>maximum 5 kg</small></span>
+                <span class="energy-input-wrap"><input id="payloadWeight" type="number" min="0" max="5" step="0.1" value="4.3"><span>kg</span></span>
+              </label>
+            </div>
+            <div class="energy-summary" aria-live="polite">
+              <div><span>Estimated use</span><strong id="estimatedTotalMah">—</strong></div>
+              <div><span>Takeoff phase</span><strong id="estimatedTakeoffMah">—</strong></div>
+              <div><span>Landing phase</span><strong id="estimatedLandingMah">—</strong></div>
+              <div><span>Real cumulative used</span><strong id="actualTotalMah">—</strong></div>
+              <div><span>Estimated final voltage</span><strong id="estimatedFinalVoltage">—</strong></div>
+              <div><span>Estimated capacity used</span><strong id="estimatedCapacityUsed">—</strong></div>
+              <div><span>Payload current factor</span><strong id="payloadEnergyFactor">—</strong></div>
+            </div>
+            <div id="energyWarning" class="energy-warning" role="status" hidden></div>
+              <p class="energy-method">Current rates use altitude-stable log windows (15–80 min loaded; 93–143 min empty). Each leg adds or subtracts about 7 A per m/s of climb or descent, capped at ±2.5 m/s, with a 1 A minimum. The additional log identifies RCOUT C4 as the main motor and C5–C8 as VTOL motors. Their takeoff and landing windows add 86 mAh/32 s and 44 mAh/78 s at the 4.3 kg reference payload; phase energy scales with payload and is included in the total. Cruise windows may differ in route and weather. Each leg switches to empty after DO_SET_SERVO; the CSV has no servo timestamp. Wind changes leg time, and commanded-groundspeed legs use an approximate cubic airspeed/power correction. Voltage follows median logged readings in 2 Ah bins and cannot predict voltage sag.</p>
+          </section>
+
           <section class="panel mission-summary" aria-labelledby="missionSummaryTitle" aria-live="polite">
             <div class="summary-heading">
               <h2 id="missionSummaryTitle">Mission summary</h2>
@@ -91,23 +134,6 @@
             </div>
           </section>
 
-          <section class="waypoints-section">
-            <div class="waypoints-heading">
-              <div><span class="step-number">03</span><h2>Waypoints</h2><span class="count-badge" id="waypointCount">0</span></div>
-              <button class="export-button" id="exportButton" type="button" disabled title="Export waypoint wind report as CSV">
-                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3v9m0 0 3.3-3.3M10 12 6.7 8.7M4.5 13.5v2A1.5 1.5 0 0 0 6 17h8a1.5 1.5 0 0 0 1.5-1.5v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                Export
-              </button>
-            </div>
-            <div class="empty-state" id="emptyState">
-              <span class="empty-icon" aria-hidden="true">
-                <svg viewBox="0 0 32 32" fill="none"><path d="M6 24.5 12.5 18l4 4L26 12.5M20 12.5h6v6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="24.5" r="2" fill="currentColor"/><circle cx="26" cy="12.5" r="2" fill="currentColor"/></svg>
-              </span>
-              <strong>Your route starts here</strong>
-              <span>Upload a mission or click on the map.</span>
-            </div>
-            <div class="waypoint-list" id="waypointList"></div>
-          </section>
           <footer class="sidebar-footer">
             <div class="forecast-source"><span class="source-dot"></span><span id="sourceStatus">Ready when you are</span></div>
             <span class="footer-caption">WIND ESTIMATES · NOT FOR SAFETY-CRITICAL USE</span>
@@ -116,36 +142,114 @@
         </div>
       </aside>
 
-      <main class="map-area">
-        <div class="map-topbar">
-          <form id="searchForm" class="search-box">
-            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="8.7" cy="8.7" r="5.6" stroke="currentColor" stroke-width="1.5"/><path d="m13 13 3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-            <input id="locationSearch" type="search" placeholder="Search a place or coordinates" aria-label="Search a place or coordinates" autocomplete="off">
-            <button type="submit" aria-label="Search location"><span>Search</span><svg viewBox="0 0 20 20" fill="none"><path d="M4 10h12m0 0-5-5m5 5-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-          </form>
-          <div class="map-tools">
-            <div class="map-legend"><span class="legend-line"></span> Mission route <span class="legend-wind">↗</span> Wind flow</div>
-            <label class="map-follow-control" title="Keep the map centered on the estimated drone position">
-              <input id="followDrone" type="checkbox" disabled>
-              <span class="follow-radio" aria-hidden="true"></span>
-              <span>Follow drone</span>
-            </label>
-            <button id="locateButton" class="icon-button" type="button" title="Go to my location" aria-label="Go to my location">
-              <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="5.2" stroke="currentColor" stroke-width="1.4"/><circle cx="10" cy="10" r="1.4" fill="currentColor"/><path d="M10 2.5v2m0 11v2m7.5-7.5h-2m-11 0h-2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-            </button>
+      <main class="workspace-area">
+        <section class="map-stage" aria-label="Mission map">
+          <div class="map-topbar">
+            <form id="searchForm" class="search-box">
+              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="8.7" cy="8.7" r="5.6" stroke="currentColor" stroke-width="1.5"/><path d="m13 13 3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              <input id="locationSearch" type="search" placeholder="Search a place or coordinates" aria-label="Search a place or coordinates" autocomplete="off">
+              <button type="submit" aria-label="Search location"><span>Search</span><svg viewBox="0 0 20 20" fill="none"><path d="M4 10h12m0 0-5-5m5 5-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            </form>
+            <div class="map-tools">
+              <div class="map-legend"><span class="legend-line"></span> Mission route <span class="legend-wind">↗</span> Wind flow</div>
+              <label class="map-follow-control" title="Keep the map centered on the estimated drone position">
+                <input id="followDrone" type="checkbox" disabled>
+                <span class="follow-radio" aria-hidden="true"></span>
+                <span>Follow drone</span>
+              </label>
+              <button id="locateButton" class="icon-button" type="button" title="Go to my location" aria-label="Go to my location">
+                <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="5.2" stroke="currentColor" stroke-width="1.4"/><circle cx="10" cy="10" r="1.4" fill="currentColor"/><path d="M10 2.5v2m0 11v2m7.5-7.5h-2m-11 0h-2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+              </button>
+              <button id="fitMissionButton" class="icon-button" type="button" title="Center the map on the mission plan" aria-label="Center the map on the mission plan" disabled>
+                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 7V4a1 1 0 0 1 1-1h3m6 0h3a1 1 0 0 1 1 1v3m0 6v3h-3m-6 0H4a1 1 0 0 1-1-1v-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10" cy="10" r="2.3" stroke="currentColor" stroke-width="1.5"/></svg>
+              </button>
+            </div>
           </div>
-        </div>
-        <div id="map" aria-label="Interactive map; click to add a waypoint"></div>
-        <div class="mission-alert" id="missionAlert" role="status" aria-live="assertive" hidden></div>
-        <div class="map-hint"><span class="map-hint-icon">+</span> Click map to add waypoint</div>
-        <div class="map-coordinates" id="mapCoordinates">Move over the map to see coordinates</div>
-        <div class="map-footer">
-          <div class="altitude-note"><span class="altitude-icon">↕</span><span>Wind is estimated at each waypoint’s flight altitude</span></div>
-          <div class="wind-units">SPEED <strong>m/s</strong><span></span> DIRECTION <strong>WIND FROM</strong></div>
-        </div>
-        <div class="loading-overlay" id="loadingOverlay" hidden>
-          <div class="loading-card"><span class="spinner"></span><strong>Reading the wind</strong><span id="loadingText">Fetching altitude-specific forecasts…</span></div>
-        </div>
+          <div id="map" aria-label="Interactive map; click to add a waypoint"></div>
+          <div class="mission-alert" id="missionAlert" role="status" aria-live="assertive" hidden></div>
+          <div class="map-hint"><span class="map-hint-icon">+</span> Click map to add waypoint</div>
+          <div class="map-coordinates" id="mapCoordinates">Move over the map to see coordinates</div>
+          <div class="map-footer">
+            <div class="altitude-note"><span class="altitude-icon">↕</span><span>Wind is estimated at each waypoint’s flight altitude</span></div>
+            <div class="wind-units">SPEED <strong>m/s</strong><span></span> DIRECTION <strong>WIND FROM</strong></div>
+          </div>
+          <div class="loading-overlay" id="loadingOverlay" hidden>
+            <div class="loading-card"><span class="spinner"></span><strong>Reading the wind</strong><span id="loadingText">Fetching altitude-specific forecasts…</span></div>
+          </div>
+        </section>
+        <aside class="energy-dashboard" aria-labelledby="energyChartsTitle">
+          <div class="panel-resize panel-resize--vertical" id="dashboardResize" role="separator" aria-label="Resize battery chart panel width" aria-orientation="vertical" tabindex="0" title="Drag or use arrow keys to resize; Home resets"></div>
+          <div class="dashboard-heading">
+            <div><span class="step-number">04</span><h2 id="energyChartsTitle">Battery charts</h2></div>
+            <span>ESTIMATE / ACTUAL</span>
+          </div>
+          <section class="battery-budget" aria-labelledby="batteryBudgetTitle">
+            <div class="battery-budget-heading">
+              <div><span id="batteryBudgetTitle">ROUTE BATTERY BUDGET</span><strong id="batteryBudgetEstimate">—</strong><small>estimated flight use</small></div>
+              <div class="battery-budget-planned"><strong id="batteryBudgetPlanned">—</strong><span id="batteryBudgetPlanPercent">—</span><small>with reserve</small></div>
+            </div>
+            <div class="battery-budget-meter" id="batteryBudgetMeter" role="meter" aria-label="Estimated battery allocation including route reserve" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="Route estimate unavailable">
+              <span class="battery-meter-used" id="batteryMeterUsed"></span>
+              <span class="battery-meter-reserve" id="batteryMeterReserve"></span>
+              <span class="battery-meter-remaining" id="batteryMeterRemaining"></span>
+            </div>
+            <div class="battery-budget-stats">
+              <div><span>Route reserve · 20%</span><strong id="batteryBudgetReserve">—</strong></div>
+              <div><span>Battery used</span><strong id="batteryBudgetUsedPercent">—</strong></div>
+              <div><span>Remaining after reserve</span><strong id="batteryBudgetRemainingPercent">—</strong></div>
+            </div>
+            <div class="battery-budget-legend" aria-hidden="true"><span><i class="budget-swatch budget-swatch-used"></i>Use</span><span><i class="budget-swatch budget-swatch-reserve"></i>Reserve</span><span><i class="budget-swatch budget-swatch-remaining"></i>Free</span></div>
+            <p class="battery-budget-status" id="batteryBudgetStatus" aria-live="polite">Check waypoint winds to calculate the route budget.</p>
+          </section>
+          <div class="energy-chart-heading"><strong>Used mAh by waypoint leg</strong><span>estimate vs real</span></div>
+          <div class="energy-chart-scroll"><svg id="consumptionChart" class="energy-chart" role="img" aria-label="Estimated and real battery use by waypoint"></svg></div>
+          <div class="energy-chart-heading"><strong>Cumulative used mAh</strong><span>estimate vs real</span></div>
+          <div class="energy-chart-scroll"><svg id="cumulativeChart" class="energy-chart" role="img" aria-label="Estimated and real cumulative battery use by waypoint"></svg></div>
+          <div class="energy-chart-heading voltage-chart-heading"><strong>Estimated battery voltage</strong><span>cumulative use</span></div>
+          <div class="energy-chart-scroll"><svg id="voltageChart" class="energy-chart voltage-chart" role="img" aria-label="Estimated battery voltage at each waypoint"></svg></div>
+          <p class="energy-method">The reference flight's median voltage drop is offset from your departure voltage. This cannot predict voltage sag.</p>
+        </aside>
+        <section class="waypoint-table-panel" aria-labelledby="waypointTableTitle">
+          <div class="panel-resize panel-resize--horizontal" id="tableResize" role="separator" aria-label="Resize waypoint table height" aria-orientation="horizontal" tabindex="0" title="Drag or use arrow keys to resize; Home resets"></div>
+          <div class="waypoints-heading">
+            <div><span class="step-number">05</span><h2 id="waypointTableTitle">Mission waypoints</h2><span class="count-badge" id="waypointCount">0</span></div>
+            <div class="waypoint-report-actions">
+              <button class="export-button print-button" id="printButton" type="button" disabled title="Print the flight report or save it as a PDF">
+                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M6 7V3.5h8V7M5 14H3.5v-5A1.5 1.5 0 0 1 5 7.5h10A1.5 1.5 0 0 1 16.5 9v5H15m-9-2h8v6H6v-6Zm8.5-3.5h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Print / Save PDF
+              </button>
+              <button class="export-button" id="exportButton" type="button" disabled title="Export waypoint wind and battery report as CSV">
+                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3v9m0 0 3.3-3.3M10 12 6.7 8.7M4.5 13.5v2A1.5 1.5 0 0 0 6 17h8a1.5 1.5 0 0 0 1.5-1.5v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Export CSV
+              </button>
+            </div>
+          </div>
+          <div class="empty-table-state" id="emptyState">Upload a flight plan or click on the map to add waypoints.</div>
+          <div class="waypoint-table-scroll" id="waypointTable" hidden>
+            <table class="waypoint-table">
+              <thead>
+                <tr>
+                  <th scope="col"># / Name</th>
+                  <th scope="col">Airspeed</th>
+                  <th scope="col">Altitude</th>
+                  <th scope="col">Wind</th>
+                  <th scope="col">Ground speed</th>
+                  <th scope="col">ETA</th>
+                  <th scope="col">Flight phase</th>
+                  <th scope="col">Est. leg mAh</th>
+                  <th scope="col" title="Color scales from green at low current to red at the log p95 of 35.21 A">Est. current</th>
+                  <th scope="col" title="Voltage mark colors map the logged range from low red to full-charge green">Est. voltage</th>
+                  <th scope="col">Est. cumul. mAh</th>
+                  <th scope="col" title="Derived from adjacent cumulative readings">Real leg mAh (derived)</th>
+                  <th scope="col" title="Enter the battery counter's cumulative used mAh at this waypoint">Real cumul. mAh (input)</th>
+                  <th scope="col" title="Mark the real pass time and compare it with the ETA">Pass time / Δ ETA</th>
+                  <th scope="col">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="waypointList"></tbody>
+            </table>
+          </div>
+        </section>
       </main>
     </div>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
