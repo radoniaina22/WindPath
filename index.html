@@ -130,16 +130,12 @@
               <span class="follow-radio" aria-hidden="true"></span>
               <span>Follow drone</span>
             </label>
-            <button id="cloudsToggle" class="clouds-toggle" type="button" aria-pressed="true" title="Hide current cloud cover">
-              <span class="clouds-symbol" aria-hidden="true">☁</span> Clouds
-            </button>
             <button id="locateButton" class="icon-button" type="button" title="Go to my location" aria-label="Go to my location">
               <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="5.2" stroke="currentColor" stroke-width="1.4"/><circle cx="10" cy="10" r="1.4" fill="currentColor"/><path d="M10 2.5v2m0 11v2m7.5-7.5h-2m-11 0h-2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
             </button>
           </div>
         </div>
         <div id="map" aria-label="Interactive map; click to add a waypoint"></div>
-        <div class="cloud-status" id="cloudStatus" role="status" aria-live="polite">Loading current clouds…</div>
         <div class="mission-alert" id="missionAlert" role="status" aria-live="assertive" hidden></div>
         <div class="map-hint"><span class="map-hint-icon">+</span> Click map to add waypoint</div>
         <div class="map-coordinates" id="mapCoordinates">Move over the map to see coordinates</div>
