@@ -266,9 +266,14 @@ button { color: inherit; }
 .map-wind-arrow { display: inline-block; color: #14886c; font-size: 15px; line-height: 1; }
 .map-wind-direction { padding-left: 5px; color: #178568; border-left: 1px solid #e4ebe8; font-variant-numeric: tabular-nums; }
 .map-wind-gust { padding-left: 5px; color: #526579; border-left: 1px solid #e4ebe8; }
-.map-estimate-label { display: flex; flex-wrap: wrap; gap: 4px; margin-left: 32px; }
-.map-estimate-label span { padding: 3px 6px; color: #34465b; background: rgb(255 255 255 / 96%); border: 1px solid #dfe9e5; border-radius: 5px; box-shadow: 0 2px 8px rgb(36 53 60 / 12%); font-size: 9px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.map-estimate-label span:last-child:not(:first-child) { color: #a45b20; }
+.map-drop-label { display: flex; flex-wrap: wrap; gap: 4px; margin-left: 32px; }
+.map-drop-label span { padding: 3px 6px; color: #a45b20; background: rgb(255 255 255 / 96%); border: 1px solid #dfe9e5; border-radius: 5px; box-shadow: 0 2px 8px rgb(36 53 60 / 12%); font-size: 9px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.live-drone-marker { display: flex; width: 176px; height: 54px; align-items: center; gap: 6px; background: transparent; border: 0; }
+.live-drone-symbol { display: grid; width: 36px; height: 36px; flex: 0 0 36px; place-items: center; background: #167f68; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 2px 9px rgb(27 55 48 / 38%); }
+.live-drone-plane { width: 21px; height: 21px; fill: #fff; transition: transform .3s ease; }
+.live-drone-details { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.live-drone-status, .live-drone-speeds { padding: 3px 6px; color: #176e5c; background: rgb(255 255 255 / 96%); border: 1px solid #cfe7dd; border-radius: 6px; box-shadow: 0 2px 8px rgb(36 53 60 / 15%); font-size: 8px; font-weight: 800; letter-spacing: .3px; white-space: nowrap; }
+.live-drone-speeds { color: #34465b; font-variant-numeric: tabular-nums; }
 .leaflet-control-attribution { font-size: 8px !important; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -450,8 +455,10 @@ button { color: inherit; }
 }
 :root[data-theme="dark"] .map-wind-direction,
 :root[data-theme="dark"] .map-wind-gust { color: #70d2b4; border-color: #405064; }
-:root[data-theme="dark"] .map-estimate-label span { color: #e3ecf4; background: rgb(25 37 51 / 96%); border-color: #405064; }
-:root[data-theme="dark"] .map-estimate-label span:last-child:not(:first-child) { color: #f0b879; }
+:root[data-theme="dark"] .map-drop-label span { color: #f0b879; background: rgb(25 37 51 / 96%); border-color: #405064; }
+:root[data-theme="dark"] .live-drone-symbol { background: #218c72; border-color: #d3e2e8; }
+:root[data-theme="dark"] .live-drone-status,
+:root[data-theme="dark"] .live-drone-speeds { color: #a4ead3; background: rgb(25 37 51 / 96%); border-color: #405f59; }
 :root[data-theme="dark"] .leaflet-control-zoom a {
   color: #e0e9f2;
   background: #1c2837;

@@ -40,6 +40,7 @@ const elements = {
 const state = {
   waypoints: [],
   markers: [],
+  droneMarker: null,
   routeLine: null,
   requestId: 0,
   forecastController: null,
@@ -531,15 +532,15 @@ function waypointNumber(waypoint, index) {
 function markerIcon(waypoint, index, selected) {
   const number = waypointNumber(waypoint, index);
   const gust = Number.isFinite(waypoint.gust) ? `${waypoint.gust.toFixed(1)} m/s` : null;
-  const estimate = Number.isFinite(waypoint.etaTimestamp)
-    ? `<div class="map-estimate-label"><span>ARR ${formatArrivalTime(waypoint.etaTimestamp)}</span>${waypoint.dropActionCount ? `<span>DROP ${formatArrivalTime(waypoint.etaTimestamp)}</span>` : ""}</div>`
+  const dropEstimate = waypoint.dropActionCount && Number.isFinite(waypoint.etaTimestamp)
+    ? `<div class="map-drop-label"><span>DROP ${formatArrivalTime(waypoint.etaTimestamp)}</span></div>`
     : "";
   const wind = waypoint.wind
     ? `<div class="map-wind-label" title="Wind ${waypoint.wind.speed.toFixed(1)} m/s from ${Math.round(waypoint.wind.direction)}°${gust ? `; 10 m gust ${gust}` : ""}"><span class="map-wind-arrow" style="transform:rotate(${(waypoint.wind.direction + 180) % 360}deg)">↑</span><span>${waypoint.wind.speed.toFixed(1)} m/s</span><span class="map-wind-direction">from ${Math.round(waypoint.wind.direction)}°</span>${gust ? `<span class="map-wind-gust">gust ${gust}</span>` : ""}</div>`
     : "";
   return L.divIcon({
     className: `waypoint-marker${selected ? " selected" : ""}`,
-    html: `<div class="map-waypoint-label"><div class="map-waypoint-top"><div class="waypoint-marker-inner"><span>${number}</span></div>${wind}</div>${estimate}</div>`,
+    html: `<div class="map-waypoint-label"><div class="map-waypoint-top"><div class="waypoint-marker-inner"><span>${number}</span></div>${wind}</div>${dropEstimate}</div>`,
     iconSize: [390, 76],
     iconAnchor: [14, 33]
   });
@@ -566,6 +567,7 @@ function renderMap() {
     state.routeLine = null;
   }
   drawWindIndicators();
+  updateDronePosition();
 }
 
 function popupContent(waypoint, index) {
@@ -585,6 +587,86 @@ function drawWindIndicators() {
     state.markers[index].setIcon(markerIcon(waypoint, index, waypoint.id === state.selectedWaypoint));
     state.markers[index].setPopupContent(popupContent(waypoint, index));
   });
+}
+
+function updateDronePosition() {
+  const waypoints = state.waypoints;
+  const first = waypoints[0];
+  if (!first || !Number.isFinite(first.etaTimestamp)) {
+    if (state.droneMarker) {
+      state.droneMarker.remove();
+      state.droneMarker = null;
+    }
+    return;
+  }
+
+  const now = Date.now();
+  let position = { lat: first.lat, lon: first.lon };
+  let bearing = 0;
+  let status = now < first.etaTimestamp ? "UPCOMING" : "IN FLIGHT";
+  let positionedOnLeg = false;
+  let currentGroundSpeed = null;
+
+  for (let index = 1; index < waypoints.length; index += 1) {
+    const from = waypoints[index - 1];
+    const to = waypoints[index];
+    if (!Number.isFinite(from.etaTimestamp) || !Number.isFinite(to.etaTimestamp)) break;
+    if (now >= to.etaTimestamp) {
+      position = { lat: to.lat, lon: to.lon };
+      continue;
+    }
+    if (now >= from.etaTimestamp) {
+      const duration = to.etaTimestamp - from.etaTimestamp;
+      const progress = duration > 0 ? (now - from.etaTimestamp) / duration : 0;
+      position = {
+        lat: from.lat + (to.lat - from.lat) * progress,
+        lon: from.lon + (to.lon - from.lon) * progress
+      };
+      bearing = distanceAndBearing(from, to).bearing;
+      positionedOnLeg = true;
+      currentGroundSpeed = to.groundSpeed;
+    }
+    break;
+  }
+
+  const last = waypoints[waypoints.length - 1];
+  if (Number.isFinite(last.etaTimestamp) && now >= last.etaTimestamp) {
+    position = { lat: last.lat, lon: last.lon };
+    status = "ARRIVED";
+    currentGroundSpeed = 0;
+  }
+
+  if (!state.droneMarker) {
+    const icon = L.divIcon({
+      className: "live-drone-marker",
+      html: '<div class="live-drone-symbol" title="Estimated drone position"><svg class="live-drone-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 3 11 6 4v3l-7-2-2 4-2-4-7 2v-3l6-4 3-11Z"/></svg></div><div class="live-drone-details"><span class="live-drone-status"></span><span class="live-drone-speeds"></span></div>',
+      iconSize: [176, 54],
+      iconAnchor: [18, 19]
+    });
+    state.droneMarker = L.marker([position.lat, position.lon], {
+      icon,
+      keyboard: false,
+      interactive: false,
+      zIndexOffset: 1000
+    }).addTo(map);
+  } else {
+    state.droneMarker.setLatLng([position.lat, position.lon]);
+  }
+
+  const markerElement = state.droneMarker.getElement();
+  if (markerElement) {
+    const plane = markerElement.querySelector(".live-drone-plane");
+    const statusLabel = markerElement.querySelector(".live-drone-status");
+    const speedsLabel = markerElement.querySelector(".live-drone-speeds");
+    if (plane) plane.style.transform = `rotate(${positionedOnLeg ? bearing : 0}deg)`;
+    if (statusLabel) statusLabel.textContent = status;
+    if (speedsLabel) {
+      const airSpeed = Number(elements.cruiseSpeed.value);
+      const airSpeedText = Number.isFinite(airSpeed) && airSpeed > 0 ? `${airSpeed.toFixed(1)}` : "—";
+      const groundSpeedText = Number.isFinite(currentGroundSpeed) ? currentGroundSpeed.toFixed(1) : "—";
+      speedsLabel.textContent = `GS ${groundSpeedText} · AS ${airSpeedText} m/s`;
+    }
+  }
 }
 
 function escapeHtml(value) {
@@ -855,3 +937,4 @@ elements.cruiseSpeed.addEventListener("change", () => {
 elements.takeoffTime.value = localDateTimeValue(new Date());
 updateMissionSummary();
 renderWaypoints();
+window.setInterval(updateDronePosition, 1000);
