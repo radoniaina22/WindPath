@@ -1,5 +1,8 @@
 const API_BASE = "https://api.open-meteo.com/v1/forecast";
 const GEOCODING_API = "https://geocoding-api.open-meteo.com/v1/search";
+const FORECAST_CACHE_PREFIX = "windpath-forecast-cache-v1:";
+const FORECAST_CACHE_TTL_MS = 60 * 60 * 1000;
+const FORECAST_CACHE_MAX_ENTRIES = 3;
 const PRESSURE_LEVELS = [
   ["975", 320], ["950", 540], ["925", 762], ["900", 988],
   ["850", 1457], ["800", 1949], ["700", 3012], ["600", 4206], ["500", 5574]
@@ -33,8 +36,6 @@ const elements = {
   takeoffTime: document.getElementById("takeoffTime"),
   themeToggle: document.getElementById("themeToggle"),
   followDrone: document.getElementById("followDrone"),
-  cloudsToggle: document.getElementById("cloudsToggle"),
-  cloudStatus: document.getElementById("cloudStatus"),
   missionAlert: document.getElementById("missionAlert"),
   waypointCount: document.getElementById("waypointCount"),
   waypointList: document.getElementById("waypointList"),
@@ -50,12 +51,6 @@ const state = {
   forecastController: null,
   selectedWaypoint: null,
   forecasts: null,
-  cloudController: null,
-  cloudRefreshTimer: null,
-  cloudCooldownTimer: null,
-  cloudOverlay: null,
-  lastCloudFetchAt: 0,
-  cloudsVisible: true,
   followDrone: false,
   lastMissionEventCheckAt: null,
   notifiedMissionEvents: new Set(),
@@ -71,8 +66,6 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 19,
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
 }).addTo(map);
-map.createPane("cloudPane");
-map.getPane("cloudPane").style.zIndex = "250";
 
 function getSavedTheme() {
   try {
@@ -90,122 +83,6 @@ function applyTheme(theme) {
   elements.themeToggle.setAttribute("aria-label", `Switch to ${isDark ? "light" : "dark"} mode`);
   elements.themeToggle.title = `Switch to ${isDark ? "light" : "dark"} mode`;
   document.querySelector('meta[name="theme-color"]').content = isDark ? "#111923" : "#f5f7fa";
-}
-
-async function refreshCloudCover() {
-  if (!state.cloudsVisible) return;
-  const waitTime = 20000 - (Date.now() - state.lastCloudFetchAt);
-  if (waitTime > 0) {
-    if (!state.cloudCooldownTimer) {
-      state.cloudCooldownTimer = window.setTimeout(() => {
-        state.cloudCooldownTimer = null;
-        refreshCloudCover();
-      }, waitTime);
-    }
-    return;
-  }
-  state.lastCloudFetchAt = Date.now();
-  if (state.cloudController) state.cloudController.abort();
-  const controller = new AbortController();
-  state.cloudController = controller;
-  elements.cloudStatus.textContent = "Loading current clouds…";
-
-  const bounds = map.getBounds();
-  const rows = 17;
-  const columns = 17;
-  const south = Math.max(-85, bounds.getSouth());
-  const north = Math.min(85, bounds.getNorth());
-  const west = bounds.getWest();
-  const east = bounds.getEast();
-  const latitudeStep = (north - south) / rows;
-  const longitudeStep = (east - west) / columns;
-  if (latitudeStep <= 0 || longitudeStep <= 0) {
-    elements.cloudStatus.textContent = "Cloud cover unavailable at this map extent";
-    return;
-  }
-
-  const cells = [];
-  for (let row = 0; row < rows; row += 1) {
-    for (let column = 0; column < columns; column += 1) {
-      const cellSouth = south + row * latitudeStep;
-      const cellWest = west + column * longitudeStep;
-      cells.push({
-        lat: cellSouth + latitudeStep / 2,
-        lon: cellWest + longitudeStep / 2,
-        bounds: [[cellSouth, cellWest], [cellSouth + latitudeStep, cellWest + longitudeStep]]
-      });
-    }
-  }
-
-  const params = new URLSearchParams({
-    latitude: cells.map(cell => cell.lat.toFixed(3)).join(","),
-    longitude: cells.map(cell => cell.lon.toFixed(3)).join(","),
-    current: "cloud_cover",
-    timezone: "auto"
-  });
-  try {
-    const response = await fetch(`${API_BASE}?${params.toString()}`, { signal: controller.signal });
-    if (!response.ok) throw new Error(`Open-Meteo returned ${response.status}.`);
-    const data = await response.json();
-    const locations = Array.isArray(data) ? data : [data];
-    if (locations.length !== cells.length) throw new Error("The cloud API returned an unexpected number of map locations.");
-    if (locations.some(location => !Number.isFinite(location.current?.cloud_cover))) {
-      throw new Error("The cloud API did not return current cloud cover for every map location.");
-    }
-
-    const coverValues = locations.map(location => location.current.cloud_cover);
-    const canvas = document.createElement("canvas");
-    const rasterSize = 512;
-    canvas.width = rasterSize;
-    canvas.height = rasterSize;
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("This browser cannot render the cloud-cover layer.");
-    const image = context.createImageData(rasterSize, rasterSize);
-
-    for (let y = 0; y < rasterSize; y += 1) {
-      const gridY = y / (rasterSize - 1) * (rows - 1);
-      const row = Math.min(rows - 2, Math.floor(gridY));
-      const rowAmount = gridY - row;
-      for (let x = 0; x < rasterSize; x += 1) {
-        const gridX = x / (rasterSize - 1) * (columns - 1);
-        const column = Math.min(columns - 2, Math.floor(gridX));
-        const columnAmount = gridX - column;
-        const topLeft = coverValues[row * columns + column];
-        const topRight = coverValues[row * columns + column + 1];
-        const bottomLeft = coverValues[(row + 1) * columns + column];
-        const bottomRight = coverValues[(row + 1) * columns + column + 1];
-        const top = topLeft + (topRight - topLeft) * columnAmount;
-        const bottom = bottomLeft + (bottomRight - bottomLeft) * columnAmount;
-        const cover = Math.max(0, Math.min(100, top + (bottom - top) * rowAmount));
-        const pixel = (y * rasterSize + x) * 4;
-        image.data[pixel] = 229;
-        image.data[pixel + 1] = 238;
-        image.data[pixel + 2] = 244;
-        image.data[pixel + 3] = Math.round((cover / 100) ** 1.15 * 180);
-      }
-    }
-
-    context.putImageData(image, 0, 0);
-    if (state.cloudOverlay) state.cloudOverlay.remove();
-    state.cloudOverlay = L.imageOverlay(canvas.toDataURL("image/png"), [[south, west], [north, east]], {
-      pane: "cloudPane",
-      opacity: 0.9,
-      interactive: false
-    }).addTo(map);
-    const forecastTime = locations[0]?.current?.time;
-    const timeLabel = forecastTime ? new Date(forecastTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
-    elements.cloudStatus.textContent = `Current cloud cover · Open-Meteo${timeLabel ? ` · ${timeLabel}` : ""}`;
-  } catch (error) {
-    if (error.name === "AbortError") return;
-    console.error("Could not retrieve current cloud cover:", error);
-    elements.cloudStatus.textContent = "Current cloud cover unavailable";
-  }
-}
-
-function scheduleCloudRefresh() {
-  if (!state.cloudsVisible) return;
-  window.clearTimeout(state.cloudRefreshTimer);
-  state.cloudRefreshTimer = window.setTimeout(refreshCloudCover, 500);
 }
 
 function resetMissionAlerts() {
@@ -717,15 +594,81 @@ function batchApiUrl(points) {
 }
 
 async function fetchForecastBatch(points, signal) {
-  const response = await fetch(batchApiUrl(points), { signal });
+  const url = batchApiUrl(points);
+  const cacheKey = `${FORECAST_CACHE_PREFIX}${url}`;
+  const cachedResults = readForecastCache(cacheKey, points.length);
+  if (cachedResults) return { results: cachedResults, fromCache: true };
+
+  const response = await fetch(url, { signal });
   if (!response.ok) {
+    if (response.status === 429) {
+      throw new Error("Open-Meteo's daily request limit has been reached. Please try again after it resets; repeated retries will not help.");
+    }
     const detail = await response.text();
     throw new Error(`Open-Meteo returned ${response.status}: ${detail.slice(0, 180)}`);
   }
   const data = await response.json();
   const results = Array.isArray(data) ? data : [data];
   if (results.length !== points.length) throw new Error("The forecast API returned an unexpected number of locations.");
-  return results;
+  writeForecastCache(cacheKey, results);
+  return { results, fromCache: false };
+}
+
+function readForecastCache(cacheKey, expectedCount) {
+  try {
+    const serialized = localStorage.getItem(cacheKey);
+    if (!serialized) return null;
+
+    const cached = JSON.parse(serialized);
+    if (
+      !cached ||
+      !Number.isFinite(cached.expiresAt) ||
+      cached.expiresAt <= Date.now() ||
+      !Array.isArray(cached.results) ||
+      cached.results.length !== expectedCount ||
+      cached.results.some(result => !result || !result.hourly || !Array.isArray(result.hourly.time))
+    ) {
+      localStorage.removeItem(cacheKey);
+      return null;
+    }
+    return cached.results;
+  } catch (error) {
+    console.warn("Could not read the cached forecast:", error);
+    return null;
+  }
+}
+
+function writeForecastCache(cacheKey, results) {
+  try {
+    const cacheEntries = [];
+    const cacheKeys = [];
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (key && key.startsWith(FORECAST_CACHE_PREFIX) && key !== cacheKey) {
+        cacheKeys.push(key);
+      }
+    }
+    for (const key of cacheKeys) {
+      try {
+        const entry = JSON.parse(localStorage.getItem(key));
+        cacheEntries.push({ key, savedAt: entry && Number.isFinite(entry.savedAt) ? entry.savedAt : 0 });
+      } catch {
+        localStorage.removeItem(key);
+      }
+    }
+    cacheEntries.sort((a, b) => a.savedAt - b.savedAt);
+    while (cacheEntries.length >= FORECAST_CACHE_MAX_ENTRIES) {
+      localStorage.removeItem(cacheEntries.shift().key);
+    }
+    const savedAt = Date.now();
+    localStorage.setItem(cacheKey, JSON.stringify({
+      savedAt,
+      expiresAt: savedAt + FORECAST_CACHE_TTL_MS,
+      results
+    }));
+  } catch (error) {
+    console.warn("Could not save the forecast cache:", error);
+  }
 }
 
 async function fetchForecastForMission() {
@@ -754,7 +697,7 @@ async function fetchForecastForMission() {
     }
     const forecastBatches = await Promise.all(batches.map(batch => fetchForecastBatch(batch, signal)));
     if (requestId !== state.requestId) return;
-    const forecasts = forecastBatches.flat();
+    const forecasts = forecastBatches.flatMap(batch => batch.results);
     state.forecasts = forecasts;
     updateWaypointEstimates(forecasts);
     state.waypoints.forEach(waypoint => {
@@ -764,7 +707,8 @@ async function fetchForecastForMission() {
     renderWaypoints();
     drawWindIndicators();
     const forecastLabel = state.waypoints[0].forecastTime;
-    setSourceStatus(`Forecast · ${formatForecastTime(forecastLabel)} UTC`, "ready");
+    const cacheLabel = forecastBatches.every(batch => batch.fromCache) ? " · cached" : "";
+    setSourceStatus(`Forecast · ${formatForecastTime(forecastLabel)} UTC${cacheLabel}`, "ready");
     elements.mapCoordinates.textContent = `${state.waypoints.length} waypoint${state.waypoints.length === 1 ? "" : "s"} · wind sampled at estimated arrival`;
   } catch (error) {
     if (error.name === "AbortError" || requestId !== state.requestId) return;
@@ -1138,8 +1082,6 @@ map.on("mousemove", event => {
 map.on("mouseout", () => {
   if (!state.waypoints.length) elements.mapCoordinates.textContent = "Move over the map to see coordinates";
 });
-map.on("moveend", scheduleCloudRefresh);
-
 elements.analyzeButton.addEventListener("click", () => {
   prepareNotificationAudio();
   fetchForecastForMission();
@@ -1150,22 +1092,6 @@ elements.followDrone.addEventListener("change", () => {
   state.followDrone = elements.followDrone.checked;
   if (state.followDrone && state.droneMarker) {
     map.panTo(state.droneMarker.getLatLng(), { animate: true, duration: 0.35 });
-  }
-});
-elements.cloudsToggle.addEventListener("click", () => {
-  state.cloudsVisible = !state.cloudsVisible;
-  elements.cloudsToggle.setAttribute("aria-pressed", String(state.cloudsVisible));
-  elements.cloudsToggle.title = `${state.cloudsVisible ? "Hide" : "Show"} current cloud cover`;
-  elements.cloudStatus.hidden = !state.cloudsVisible;
-  if (state.cloudsVisible) {
-    scheduleCloudRefresh();
-  } else {
-    window.clearTimeout(state.cloudRefreshTimer);
-    window.clearTimeout(state.cloudCooldownTimer);
-    state.cloudCooldownTimer = null;
-    if (state.cloudController) state.cloudController.abort();
-    if (state.cloudOverlay) state.cloudOverlay.remove();
-    elements.cloudStatus.textContent = "Cloud cover hidden";
   }
 });
 elements.missionFile.addEventListener("change", event => loadMissionFile(event.target.files[0]));
@@ -1239,6 +1165,4 @@ elements.takeoffTime.addEventListener("change", () => {
 elements.takeoffTime.value = localDateTimeValue(new Date());
 updateMissionSummary();
 renderWaypoints();
-scheduleCloudRefresh();
 window.setInterval(updateDronePosition, 1000);
-window.setInterval(refreshCloudCover, 15 * 60 * 1000);
