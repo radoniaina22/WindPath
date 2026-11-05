@@ -95,7 +95,7 @@
               </label>
               <label class="energy-field" for="payloadWeight">
                 <span>Payload weight <small>maximum 5 kg</small></span>
-                <span class="energy-input-wrap"><input id="payloadWeight" type="number" min="0" max="5" step="0.1" value="4.3"><span>kg</span></span>
+                <span class="energy-input-wrap"><input id="payloadWeight" type="number" min="0" max="5" step="0.01" value="4.3"><span>kg</span></span>
               </label>
             </div>
             <div class="energy-summary" aria-live="polite">
@@ -108,7 +108,7 @@
               <div><span>Payload current factor</span><strong id="payloadEnergyFactor">—</strong></div>
             </div>
             <div id="energyWarning" class="energy-warning" role="status" hidden></div>
-              <p class="energy-method">Current rates use altitude-stable log windows (15–80 min loaded; 93–143 min empty). Each leg adds or subtracts about 7 A per m/s of climb or descent, capped at ±2.5 m/s, with a 1 A minimum. The additional log identifies RCOUT C4 as the main motor and C5–C8 as VTOL motors. Their takeoff and landing windows add 86 mAh/32 s and 44 mAh/78 s at the 4.3 kg reference payload; phase energy scales with payload and is included in the total. Cruise windows may differ in route and weather. Each leg switches to empty after DO_SET_SERVO; the CSV has no servo timestamp. Wind changes leg time, and commanded-groundspeed legs use an approximate cubic airspeed/power correction. Voltage follows median logged readings in 2 Ah bins and cannot predict voltage sag.</p>
+              <p class="energy-method">The 36,553 mAh long-flight reference supplies cruise-current calibration (16.149 A loaded, 15.541 A empty) and the full-discharge voltage curve. The newer DataFlash logs show short, higher-current post-drop C4 segments averaging 27.78 A at 25.1 m/s, but only about 14 minutes of combined powered cruise; they are not extrapolated as the baseline for a much longer route. Seven logs contain the C13 900→2100 release pulse with C14 at 1000; the 3.8 kg log is ground-only. After the drop point, payload is exactly 0 kg. Payload current uses the existing 1.5-power curve. For commanded-groundspeed legs, the cubic mean airspeed factor is normalized to the default cruise speed; direct airspeed-commanded legs use the long-flight current calibration without an extra speed multiplier. Climb/descent uses MSL altitude (AGL target plus local ground elevation) when available; each leg adds or subtracts about 7 A per m/s, capped at ±2.5 m/s, with a 1 A minimum. Takeoff and landing retain 86 mAh/32 s and 44 mAh/78 s from the long-flight reference. Voltage uses the full-discharge curve and a 34.06 mΩ load-sag fit from the new battery samples; those logs cover only the first 1.34 Ah. Actual voltage sag varies with battery condition and temperature.</p>
           </section>
 
           <section class="panel mission-summary" aria-labelledby="missionSummaryTitle" aria-live="polite">
@@ -128,6 +128,27 @@
               <span>Estimated arrival</span>
               <strong id="summaryArrival">—</strong>
             </div>
+            <div class="summary-row">
+              <span>Total flight distance</span>
+              <strong id="summaryDistance">—</strong>
+            </div>
+            <div class="summary-row">
+              <span>Home pressure at takeoff</span>
+              <strong id="summaryTakeoffPressure">—</strong>
+            </div>
+            <div class="summary-row">
+              <span>Home pressure at landing</span>
+              <strong id="summaryLandingPressure">—</strong>
+            </div>
+            <div class="summary-row">
+              <span>Pressure difference (landing - takeoff)</span>
+              <strong id="summaryPressureDifference">—</strong>
+            </div>
+            <div class="summary-row">
+              <span>Pressure-derived altitude change</span>
+              <strong id="summaryPressureAltitudeChange">Not available</strong>
+            </div>
+            <p class="summary-note">Altitude change is an ISA pressure-altitude estimate. Pressure changes at a fixed home location mostly reflect weather, not physical movement.</p>
             <div class="summary-row">
               <span>Average wind speed</span>
               <strong id="summaryWind" title="Distance-weighted average of wind estimates along flown legs">—</strong>
@@ -205,9 +226,9 @@
           <div class="energy-chart-scroll"><svg id="consumptionChart" class="energy-chart" role="img" aria-label="Estimated and real battery use by waypoint"></svg></div>
           <div class="energy-chart-heading"><strong>Cumulative used mAh</strong><span>estimate vs real</span></div>
           <div class="energy-chart-scroll"><svg id="cumulativeChart" class="energy-chart" role="img" aria-label="Estimated and real cumulative battery use by waypoint"></svg></div>
-          <div class="energy-chart-heading voltage-chart-heading"><strong>Estimated battery voltage</strong><span>cumulative use</span></div>
+          <div class="energy-chart-heading voltage-chart-heading"><strong>Estimated battery voltage</strong><span>capacity + load</span></div>
           <div class="energy-chart-scroll"><svg id="voltageChart" class="energy-chart voltage-chart" role="img" aria-label="Estimated battery voltage at each waypoint"></svg></div>
-          <p class="energy-method">The reference flight's median voltage drop is offset from your departure voltage. This cannot predict voltage sag.</p>
+          <p class="energy-method">Each waypoint voltage uses the full reference discharge curve plus an estimated load-sag correction relative to the reference flight's 14.44 A average. Pack resistance is fitted at 34.06 mΩ from the new battery logs; cell temperature, battery age, and transient sag can change actual voltage.</p>
         </aside>
         <section class="waypoint-table-panel" aria-labelledby="waypointTableTitle">
           <div class="panel-resize panel-resize--horizontal" id="tableResize" role="separator" aria-label="Resize waypoint table height" aria-orientation="horizontal" tabindex="0" title="Drag or use arrow keys to resize; Home resets"></div>

@@ -1,6 +1,6 @@
 const API_BASE = "https://api.open-meteo.com/v1/forecast";
 const GEOCODING_API = "https://geocoding-api.open-meteo.com/v1/search";
-const FORECAST_CACHE_PREFIX = "windpath-forecast-cache-v1:";
+const FORECAST_CACHE_PREFIX = "windpath-forecast-cache-v2:";
 const FORECAST_CACHE_TTL_MS = 60 * 60 * 1000;
 const FORECAST_CACHE_MAX_ENTRIES = 3;
 const PANEL_LAYOUT_STORAGE_KEY = "windpath-panel-layout-v1";
@@ -9,7 +9,7 @@ const PRESSURE_LEVELS = [
   ["850", 1457], ["800", 1949], ["700", 3012], ["600", 4206], ["500", 5574]
 ];
 const HOURLY_FIELDS = [
-  "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m", "wind_speed_80m", "wind_direction_80m",
+  "surface_pressure", "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m", "wind_speed_80m", "wind_direction_80m",
   "wind_speed_120m", "wind_direction_120m", "wind_speed_180m", "wind_direction_180m",
   ...PRESSURE_LEVELS.flatMap(([pressure]) => [`wind_speed_${pressure}hPa`, `wind_direction_${pressure}hPa`])
 ];
@@ -29,12 +29,18 @@ const MISSION_COMMAND_NAMES = {
   93: "NAV_DELAY"
 };
 const MAX_PAYLOAD_KG = 5;
+const PAYLOAD_CURRENT_EXPONENT = 1.5;
 const DO_CHANGE_SPEED = 178;
 const DO_SET_SERVO = 183;
+const PAYLOAD_RELEASE_CHANNELS = new Map([
+  [13, { minPwm: 2000, maxPwm: 2200 }],
+  [14, { minPwm: 1000, maxPwm: 1000 }]
+]);
 const VERTICAL_CURRENT_ADJUSTMENT_AMPS_PER_MPS = 7;
 const MAX_MODELED_VERTICAL_SPEED_MPS = 2.5;
 const MIN_ESTIMATED_CURRENT_AMPS = 1;
 const REFERENCE_CURRENT_P95_AMPS = 35.21;
+const VOLTAGE_SAG_RESISTANCE_OHMS = 0.03406;
 const ROUTE_RESERVE_FRACTION = 0.2;
 const PHASE_ALTITUDE_TOLERANCE_METERS = 2;
 const DEFAULT_CENTER = [-19.0, 46.7];
@@ -42,6 +48,7 @@ const FLIGHT_REFERENCE = {
   payloadKg: 4.3,
   durationMinutes: 151.8483,
   usedMah: 36553,
+  averageCurrentAmps: 14.44,
   loadedCruiseCurrentAmps: 16.149,
   emptyCruiseCurrentAmps: 15.541,
   minimumVoltage: 33.91,
@@ -75,6 +82,13 @@ const FLIGHT_PHASE_REFERENCE = {
 const EMPTY_CRUISE_CURRENT_AMPS = FLIGHT_REFERENCE.emptyCruiseCurrentAmps;
 const LOADED_CRUISE_CURRENT_AMPS = FLIGHT_REFERENCE.loadedCruiseCurrentAmps;
 
+function currentForPayload(payloadKg) {
+  const payloadFraction = Math.max(0, payloadKg) / FLIGHT_REFERENCE.payloadKg;
+  return EMPTY_CRUISE_CURRENT_AMPS
+    + (LOADED_CRUISE_CURRENT_AMPS - EMPTY_CRUISE_CURRENT_AMPS)
+      * payloadFraction ** PAYLOAD_CURRENT_EXPONENT;
+}
+
 const elements = {
   workspaceArea: document.querySelector(".workspace-area"),
   mapStage: document.querySelector(".map-stage"),
@@ -97,6 +111,11 @@ const elements = {
   summaryArrival: document.getElementById("summaryArrival"),
   summaryDrops: document.getElementById("summaryDrops"),
   summaryTakeoff: document.getElementById("summaryTakeoff"),
+  summaryTakeoffPressure: document.getElementById("summaryTakeoffPressure"),
+  summaryLandingPressure: document.getElementById("summaryLandingPressure"),
+  summaryPressureDifference: document.getElementById("summaryPressureDifference"),
+  summaryPressureAltitudeChange: document.getElementById("summaryPressureAltitudeChange"),
+  summaryDistance: document.getElementById("summaryDistance"),
   summaryWind: document.getElementById("summaryWind"),
   sourceStatus: document.getElementById("sourceStatus"),
   takeoffTime: document.getElementById("takeoffTime"),
@@ -384,8 +403,8 @@ function checkMissionAlerts(now) {
     if (!Number.isFinite(waypoint.etaTimestamp) || waypoint.etaTimestamp <= previousCheck || waypoint.etaTimestamp > now) return;
     const name = waypoint.name || `Waypoint ${index + 1}`;
     notifyMissionEvent(`waypoint:${waypoint.id}`, `Estimated waypoint reached: ${name}.`);
-    if (waypoint.dropActionCount > 0) {
-      const count = waypoint.dropActionCount > 1 ? ` (${waypoint.dropActionCount} actions)` : "";
+    if (hasDropPoint(waypoint)) {
+      const count = waypoint.dropActionCount > 1 ? ` (${waypoint.dropActionCount} releases)` : "";
       notifyMissionEvent(`drop:${waypoint.id}`, `Estimated drop at ${name}${count}.`);
     }
   });
@@ -519,16 +538,16 @@ function updateMissionSummary() {
     ? formatArrivalTime(takeoffTimestamp)
     : "Not set";
 
-  const dropWaypoints = state.waypoints.filter(waypoint => waypoint.dropActionCount > 0);
+  const dropWaypoints = state.waypoints.filter(hasDropPoint);
   if (!dropWaypoints.length) {
-    elements.summaryDrops.textContent = "No drop action in mission";
+    elements.summaryDrops.textContent = "No recognized payload release";
   } else {
     elements.summaryDrops.innerHTML = dropWaypoints.map((waypoint, index) => {
       const label = waypoint.name || `Waypoint ${waypointNumber(waypoint, state.waypoints.indexOf(waypoint))}`;
       const time = Number.isFinite(waypoint.etaTimestamp)
         ? formatClockTime(waypoint.etaTimestamp)
         : "Not estimated";
-      const count = waypoint.dropActionCount > 1 ? ` (${waypoint.dropActionCount} actions)` : "";
+      const count = waypoint.dropActionCount > 1 ? ` (${waypoint.dropActionCount} releases)` : "";
       return `<span>${escapeHtml(label)}${count}: ${escapeHtml(time)}</span>`;
     }).join("");
   }
@@ -538,22 +557,99 @@ function updateMissionSummary() {
     ? formatClockTime(finalWaypoint.etaTimestamp)
     : "Not estimated";
 
+  updateHomePressureSummary(takeoffTimestamp, finalWaypoint?.etaTimestamp);
+
   let weightedWindSpeed = 0;
+  let routeDistance = 0;
   let totalDistance = 0;
   for (let index = 1; index < state.waypoints.length; index += 1) {
     const waypoint = state.waypoints[index];
-    if (!waypoint.wind || !Number.isFinite(waypoint.etaTimestamp)) continue;
     const { distance } = distanceAndBearing(state.waypoints[index - 1], waypoint);
+    routeDistance += distance;
+    if (!waypoint.wind || !Number.isFinite(waypoint.etaTimestamp)) continue;
     if (distance <= 0) continue;
     weightedWindSpeed += waypoint.wind.speed * distance;
     totalDistance += distance;
   }
+  elements.summaryDistance.textContent = state.waypoints.length > 0
+    ? `${(routeDistance / 1000).toFixed(2)} km`
+    : "—";
   if (totalDistance === 0 && state.waypoints.length === 1 && state.waypoints[0].wind) {
     elements.summaryWind.textContent = `${state.waypoints[0].wind.speed.toFixed(1)} m/s`;
   } else {
     elements.summaryWind.textContent = totalDistance > 0
       ? `${(weightedWindSpeed / totalDistance).toFixed(1)} m/s`
       : "Not estimated";
+  }
+}
+
+function pressureAtTimestamp(forecast, timestamp) {
+  const times = forecast?.hourly?.time;
+  const pressures = forecast?.hourly?.surface_pressure;
+  if (!Array.isArray(times) || !Array.isArray(pressures) || !Number.isFinite(timestamp)) return null;
+
+  const firstTime = new Date(`${times[0]}Z`).getTime();
+  const lastTime = new Date(`${times[times.length - 1]}Z`).getTime();
+  if (!Number.isFinite(firstTime) || !Number.isFinite(lastTime) || timestamp < firstTime || timestamp > lastTime) return null;
+
+  let lowerIndex = -1;
+  for (let index = 0; index < times.length; index += 1) {
+    const sampleTime = new Date(`${times[index]}Z`).getTime();
+    if (!Number.isFinite(sampleTime)) continue;
+    if (sampleTime === timestamp) {
+      return Number.isFinite(pressures[index]) ? pressures[index] : null;
+    }
+    if (sampleTime < timestamp) {
+      lowerIndex = index;
+      continue;
+    }
+
+    const lowerPressure = pressures[lowerIndex];
+    const upperPressure = pressures[index];
+    const lowerTime = new Date(`${times[lowerIndex]}Z`).getTime();
+    if (!Number.isFinite(lowerPressure) || !Number.isFinite(upperPressure) || lowerTime >= sampleTime) return null;
+    const fraction = (timestamp - lowerTime) / (sampleTime - lowerTime);
+    return lowerPressure + (upperPressure - lowerPressure) * fraction;
+  }
+  return null;
+}
+
+function pressureAltitudeMeters(pressureHpa) {
+  if (!Number.isFinite(pressureHpa) || pressureHpa <= 0) return null;
+  return 44330 * (1 - (pressureHpa / 1013.25) ** 0.190294957);
+}
+
+function updateHomePressureSummary(takeoffTimestamp, landingTimestamp) {
+  const homeWaypoint = state.waypoints.find(point => point.sequence === 0) || state.waypoints[0];
+  const homeForecast = state.forecasts?.[state.waypoints.indexOf(homeWaypoint)];
+  const takeoffPressure = pressureAtTimestamp(homeForecast, takeoffTimestamp);
+  const landingPressure = pressureAtTimestamp(homeForecast, landingTimestamp);
+  elements.summaryTakeoffPressure.textContent = Number.isFinite(takeoffPressure)
+    ? `${takeoffPressure.toFixed(1)} hPa`
+    : "—";
+  elements.summaryLandingPressure.textContent = Number.isFinite(landingPressure)
+    ? `${landingPressure.toFixed(1)} hPa`
+    : "—";
+
+  if (!Number.isFinite(takeoffPressure) || !Number.isFinite(landingPressure)) {
+    elements.summaryPressureDifference.textContent = "—";
+    elements.summaryPressureAltitudeChange.textContent = "Not available";
+    elements.summaryPressureAltitudeChange.classList.remove("pressure-change--increase", "pressure-change--decrease");
+    return;
+  }
+
+  const pressureDifference = landingPressure - takeoffPressure;
+  const altitudeDifference = pressureAltitudeMeters(landingPressure) - pressureAltitudeMeters(takeoffPressure);
+  elements.summaryPressureDifference.textContent = `${pressureDifference >= 0 ? "+" : ""}${pressureDifference.toFixed(1)} hPa`;
+  elements.summaryPressureAltitudeChange.classList.remove("pressure-change--increase", "pressure-change--decrease");
+  if (Math.abs(altitudeDifference) < 0.5) {
+    elements.summaryPressureAltitudeChange.textContent = "No significant change";
+  } else if (altitudeDifference > 0) {
+    elements.summaryPressureAltitudeChange.textContent = `Increase · +${altitudeDifference.toFixed(1)} m`;
+    elements.summaryPressureAltitudeChange.classList.add("pressure-change--increase");
+  } else {
+    elements.summaryPressureAltitudeChange.textContent = `Decrease · ${altitudeDifference.toFixed(1)} m`;
+    elements.summaryPressureAltitudeChange.classList.add("pressure-change--decrease");
   }
 }
 
@@ -637,7 +733,7 @@ function updateWaypointEstimates(forecasts) {
   updateEnergyEstimates();
 }
 
-function voltageForUsedMah(usedMah, departureVoltage) {
+function voltageForUsedMah(usedMah, departureVoltage, currentAmps) {
   const samples = FLIGHT_REFERENCE.voltageSamples;
   let referenceVoltage;
   if (usedMah <= samples[0].usedMah) {
@@ -651,8 +747,14 @@ function voltageForUsedMah(usedMah, departureVoltage) {
     const fraction = (usedMah - lower.usedMah) / (upper.usedMah - lower.usedMah);
     referenceVoltage = lower.voltage + (upper.voltage - lower.voltage) * fraction;
   }
+  const loadAdjustmentV = Number.isFinite(currentAmps)
+    ? (FLIGHT_REFERENCE.averageCurrentAmps - currentAmps) * VOLTAGE_SAG_RESISTANCE_OHMS
+    : 0;
   return {
-    voltage: Number.isFinite(departureVoltage) ? departureVoltage + referenceVoltage - samples[0].voltage : null,
+    voltage: Number.isFinite(departureVoltage)
+      ? departureVoltage + referenceVoltage - samples[0].voltage + loadAdjustmentV
+      : null,
+    loadAdjustmentV,
     beyondReference: usedMah > samples[samples.length - 1].usedMah
   };
 }
@@ -662,13 +764,13 @@ function updateEnergyEstimates() {
   const departureVoltage = Number(elements.departureVoltage.value);
   const validDepartureVoltage = Number.isFinite(departureVoltage) && departureVoltage >= 30 && departureVoltage <= 51;
   const validPayload = Number.isFinite(payloadKg) && payloadKg >= 0 && payloadKg <= MAX_PAYLOAD_KG;
-  const currentForPayload = weight => EMPTY_CRUISE_CURRENT_AMPS
-    + (LOADED_CRUISE_CURRENT_AMPS - EMPTY_CRUISE_CURRENT_AMPS) * weight / FLIGHT_REFERENCE.payloadKg;
   const phaseScale = validPayload
     ? currentForPayload(payloadKg) / currentForPayload(FLIGHT_PHASE_REFERENCE.payloadKg)
     : 1;
   const takeoffMah = FLIGHT_PHASE_REFERENCE.takeoff.usedMah * phaseScale;
   const landingMah = FLIGHT_PHASE_REFERENCE.landing.usedMah * phaseScale;
+  const takeoffCurrentA = takeoffMah * 3600 / (FLIGHT_PHASE_REFERENCE.takeoff.durationSeconds * 1000);
+  const landingCurrentA = landingMah * 3600 / (FLIGHT_PHASE_REFERENCE.landing.durationSeconds * 1000);
   let cumulativeMah = 0;
   let previousArrival = null;
   let payloadOnboardKg = payloadKg;
@@ -684,43 +786,42 @@ function updateEnergyEstimates() {
       waypoint.verticalCurrentAdjustmentA = null;
       waypoint.cumulativeEstimatedMah = null;
       waypoint.estimatedVoltage = null;
+      waypoint.estimatedVoltageLoadAdjustmentV = null;
       previousArrival = null;
-      if (waypoint.dropActionCount > 0) payloadOnboardKg = 0;
+      if (hasDropPoint(waypoint)) payloadOnboardKg = 0;
       return;
     }
 
-    const groundspeedPowerFactor = waypoint.speedSetting?.type === 1 && Number.isFinite(waypoint.airSpeed)
-      ? (waypoint.airSpeed / waypoint.speedSetting.speed) ** 3
+    const previousWaypoint = index > 0 ? state.waypoints[index - 1] : null;
+    const groundspeedPowerFactor = waypoint.speedSetting?.type === 1
+      ? averageCubicPowerFactor(
+        previousWaypoint?.airSpeed,
+        waypoint.airSpeed,
+        defaultCruiseSpeed
+      )
       : 1;
     const durationHours = index === 0 || !Number.isFinite(previousArrival)
       ? 0
       : Math.max(0, (waypoint.etaTimestamp - previousArrival) / 3600000);
-    const previousWaypoint = index > 0 ? state.waypoints[index - 1] : null;
-    const previousAltitudeMsl = previousWaypoint
-      && Number.isFinite(previousWaypoint.targetAltitudeAgl)
-      && Number.isFinite(previousWaypoint.groundElevation)
-      ? previousWaypoint.targetAltitudeAgl + previousWaypoint.groundElevation
+    const altitudeChangeM = previousWaypoint
+      ? altitudeChangeBetweenWaypoints(previousWaypoint, waypoint, true)
       : null;
-    const altitudeMsl = Number.isFinite(waypoint.targetAltitudeAgl)
-      && Number.isFinite(waypoint.groundElevation)
-      ? waypoint.targetAltitudeAgl + waypoint.groundElevation
+    const verticalSpeedMps = durationHours > 0 && Number.isFinite(altitudeChangeM)
+      ? altitudeChangeM / (durationHours * 3600)
       : null;
-    const verticalSpeedMps = durationHours > 0
-      && Number.isFinite(previousAltitudeMsl)
-      && Number.isFinite(altitudeMsl)
-      ? (altitudeMsl - previousAltitudeMsl) / (durationHours * 3600)
-      : 0;
-    const modeledVerticalSpeedMps = Math.max(
-      -MAX_MODELED_VERTICAL_SPEED_MPS,
-      Math.min(MAX_MODELED_VERTICAL_SPEED_MPS, verticalSpeedMps)
-    );
-    const verticalCurrentAdjustmentA = durationHours > 0
+    const modeledVerticalSpeedMps = Number.isFinite(verticalSpeedMps)
+      ? Math.max(
+        -MAX_MODELED_VERTICAL_SPEED_MPS,
+        Math.min(MAX_MODELED_VERTICAL_SPEED_MPS, verticalSpeedMps)
+      )
+      : null;
+    const verticalCurrentAdjustmentA = Number.isFinite(modeledVerticalSpeedMps)
       ? modeledVerticalSpeedMps * VERTICAL_CURRENT_ADJUSTMENT_AMPS_PER_MPS
       : null;
     const estimatedCurrentA = durationHours > 0
       ? Math.max(
         MIN_ESTIMATED_CURRENT_AMPS,
-        currentForPayload(legPayloadKg) * groundspeedPowerFactor + verticalCurrentAdjustmentA
+        currentForPayload(legPayloadKg) * groundspeedPowerFactor + (verticalCurrentAdjustmentA ?? 0)
       )
       : null;
     const segmentMah = durationHours > 0 ? durationHours * estimatedCurrentA * 1000 : 0;
@@ -729,15 +830,77 @@ function updateEnergyEstimates() {
     cumulativeMah += segmentMah + phaseMah;
     waypoint.estimatedUsedMah = segmentMah + phaseMah;
     waypoint.estimatedCurrentA = estimatedCurrentA;
-    waypoint.verticalSpeedMps = durationHours > 0 ? verticalSpeedMps : null;
+    waypoint.verticalSpeedMps = verticalSpeedMps;
     waypoint.verticalCurrentAdjustmentA = verticalCurrentAdjustmentA;
     waypoint.cumulativeEstimatedMah = cumulativeMah;
-    waypoint.estimatedVoltage = voltageForUsedMah(cumulativeMah, validDepartureVoltage ? departureVoltage : null).voltage;
+    const voltageCurrentA = index === state.waypoints.length - 1
+      ? landingCurrentA
+      : index === 0
+        ? takeoffCurrentA
+        : estimatedCurrentA;
+    const voltageEstimate = voltageForUsedMah(
+      cumulativeMah,
+      validDepartureVoltage ? departureVoltage : null,
+      voltageCurrentA
+    );
+    waypoint.estimatedVoltage = voltageEstimate.voltage;
+    waypoint.estimatedVoltageLoadAdjustmentV = voltageEstimate.loadAdjustmentV;
     previousArrival = waypoint.etaTimestamp;
-    if (waypoint.dropActionCount > 0) payloadOnboardKg = 0;
+    if (hasDropPoint(waypoint)) payloadOnboardKg = 0;
   });
   updateEnergySummary();
   drawEnergyCharts();
+}
+
+function averageCubicPowerFactor(startAirspeed, endAirspeed, referenceSpeed) {
+  if (!Number.isFinite(referenceSpeed) || referenceSpeed <= 0) return 1;
+  const speeds = [startAirspeed, endAirspeed]
+    .filter(Number.isFinite)
+    .map(speed => Math.max(0, speed));
+  if (!speeds.length) return 1;
+  const [start, end] = speeds.length === 1 ? [speeds[0], speeds[0]] : speeds;
+  const averageCubicAirspeed = (start ** 3 + start ** 2 * end + start * end ** 2 + end ** 3) / 4;
+  return averageCubicAirspeed / referenceSpeed ** 3;
+}
+
+function waypointAltitudeReference(waypoint) {
+  if (
+    Number.isFinite(waypoint.targetAltitudeAgl)
+    && Number.isFinite(waypoint.groundElevation)
+  ) {
+    return {
+      altitude: waypoint.targetAltitudeAgl + waypoint.groundElevation,
+      reference: "msl"
+    };
+  }
+
+  if (
+    waypoint.altitudeMode === "absolute"
+    || waypoint.frame === 0
+    || waypoint.frame === 5
+  ) {
+    return { altitude: waypoint.altitude, reference: "msl" };
+  }
+
+  if (waypoint.frame === 3 && waypoint.altitudeMode !== "terrain") {
+    return { altitude: waypoint.altitude, reference: "home" };
+  }
+
+  return null;
+}
+
+function altitudeChangeBetweenWaypoints(previousWaypoint, waypoint, requireMsl = false) {
+  const previous = waypointAltitudeReference(previousWaypoint);
+  const current = waypointAltitudeReference(waypoint);
+  if (
+    !previous
+    || !current
+    || previous.reference !== current.reference
+    || (requireMsl && previous.reference !== "msl")
+  ) {
+    return null;
+  }
+  return current.altitude - previous.altitude;
 }
 
 function updateEnergySummary() {
@@ -747,12 +910,10 @@ function updateEnergySummary() {
   const payloadKg = Number(elements.payloadWeight.value);
   const validPayload = Number.isFinite(payloadKg) && payloadKg >= 0 && payloadKg <= MAX_PAYLOAD_KG;
   const payloadCurrentFactor = validPayload
-    ? (EMPTY_CRUISE_CURRENT_AMPS
-      + (LOADED_CRUISE_CURRENT_AMPS - EMPTY_CRUISE_CURRENT_AMPS) * payloadKg / FLIGHT_REFERENCE.payloadKg)
-      / EMPTY_CRUISE_CURRENT_AMPS
+    ? currentForPayload(payloadKg) / EMPTY_CRUISE_CURRENT_AMPS
     : null;
   const phaseScale = Number.isFinite(payloadCurrentFactor)
-    ? payloadCurrentFactor * EMPTY_CRUISE_CURRENT_AMPS / LOADED_CRUISE_CURRENT_AMPS
+    ? currentForPayload(payloadKg) / LOADED_CRUISE_CURRENT_AMPS
     : null;
   const takeoffMah = Number.isFinite(phaseScale) ? FLIGHT_PHASE_REFERENCE.takeoff.usedMah * phaseScale : null;
   const landingMah = Number.isFinite(phaseScale) ? FLIGHT_PHASE_REFERENCE.landing.usedMah * phaseScale : null;
@@ -835,7 +996,7 @@ function updateEnergySummary() {
     ? `${(finalWaypoint.cumulativeEstimatedMah / capacityMah * 100).toFixed(1)}%`
     : "—";
   elements.payloadEnergyFactor.textContent = Number.isFinite(payloadCurrentFactor)
-    ? `${payloadCurrentFactor.toFixed(3)}×`
+    ? `${payloadCurrentFactor.toFixed(4)}×`
     : "—";
   elements.capacityBadge.textContent = Number.isFinite(capacityMah) && capacityMah > 0
     ? `12S · ${(capacityMah / 1000).toFixed(capacityMah % 1000 === 0 ? 0 : 1)} Ah`
@@ -860,8 +1021,8 @@ function updateEnergySummary() {
   if (finalWaypoint && finalWaypoint.cumulativeEstimatedMah > FLIGHT_REFERENCE.usedMah) {
     warnings.push("This estimate extends beyond the measured flight log; voltage holds at the final reference-bin drop offset to your departure voltage.");
   }
-  if (state.waypoints.some(waypoint => waypoint.dropActionCount > 0)) {
-    warnings.push("Payload is modeled as onboard through the drop waypoint and empty on subsequent legs. The CSV has no servo timestamp; the loaded/empty current rates are inferred from altitude-stable flight windows.");
+  if (state.waypoints.some(hasDropPoint)) {
+    warnings.push("Payload is modeled as onboard through the drop point, then exactly 0 kg on every subsequent leg.");
   }
   elements.energyWarning.textContent = warnings.join(" ");
   elements.energyWarning.hidden = warnings.length === 0;
@@ -962,7 +1123,10 @@ function drawEnergyCharts() {
   voltageParts.push(`<polyline class="chart-voltage-line" points="${linePoints.map(point => `${point.x},${point.y}`).join(" ")}"></polyline>`);
   linePoints.forEach((point, index) => {
     const waypoint = point.waypoint;
-    voltageParts.push(`<circle class="chart-voltage-point" cx="${point.x}" cy="${point.y}" r="3"><title>Waypoint ${point.index + 1}: ${waypoint.estimatedVoltage.toFixed(1)} V</title></circle>`);
+    const loadAdjustment = Number.isFinite(waypoint.estimatedVoltageLoadAdjustmentV)
+      ? `; load adjustment ${waypoint.estimatedVoltageLoadAdjustmentV.toFixed(2)} V`
+      : "";
+    voltageParts.push(`<circle class="chart-voltage-point" cx="${point.x}" cy="${point.y}" r="3"><title>Waypoint ${point.index + 1}: ${waypoint.estimatedVoltage.toFixed(1)} V${loadAdjustment}</title></circle>`);
     if (point.index % Math.ceil(points.length / 10) === 0 || point.index === points.length - 1) {
       voltageParts.push(`<text class="chart-axis" x="${point.x}" y="${plotBottom + 16}" text-anchor="middle">WP ${waypointNumber(waypoint, state.waypoints.indexOf(waypoint))}</text>`);
     }
@@ -1066,6 +1230,7 @@ function parseWaypointsFile(text, fileName) {
     const points = [];
     let activeSpeedSetting = null;
     let previousWaypointSpeedSetting = null;
+    const pendingPayloadReleaseChannels = new Set();
     items.forEach((item, index) => {
       const command = Number(item.command ?? 16);
       if (command === DO_CHANGE_SPEED) {
@@ -1078,8 +1243,11 @@ function parseWaypointsFile(text, fileName) {
         return;
       }
       if (command === DO_SET_SERVO) {
-        const previousWaypoint = points[points.length - 1];
-        if (previousWaypoint) previousWaypoint.dropActionCount += 1;
+        const params = Array.isArray(item.params) ? item.params : [];
+        const channel = Number(params[0]);
+        const pwm = Number(params[1]);
+        markDropPoint(points);
+        recordPayloadReleaseOutput(points, pendingPayloadReleaseChannels, channel, pwm);
         return;
       }
       if (!NAV_COMMANDS.has(command)) return;
@@ -1103,6 +1271,7 @@ function parseWaypointsFile(text, fileName) {
         altitudeMode
       });
       if (waypoint) {
+        pendingPayloadReleaseChannels.clear();
         waypoint.speedSetting = activeSpeedSetting;
         waypoint.speedChanged = Boolean(activeSpeedSetting && (
           !previousWaypointSpeedSetting
@@ -1122,6 +1291,7 @@ function parseWaypointsFile(text, fileName) {
   const points = [];
   let activeSpeedSetting = null;
   let previousWaypointSpeedSetting = null;
+  const pendingPayloadReleaseChannels = new Set();
   for (const line of lines.slice(start)) {
     const fields = line.split(/\s+/);
     if (fields.length < 12) continue;
@@ -1137,8 +1307,10 @@ function parseWaypointsFile(text, fileName) {
       continue;
     }
     if (command === DO_SET_SERVO) {
-      const previousWaypoint = points[points.length - 1];
-      if (previousWaypoint) previousWaypoint.dropActionCount += 1;
+      const channel = Number(fields[4]);
+      const pwm = Number(fields[5]);
+      markDropPoint(points);
+      recordPayloadReleaseOutput(points, pendingPayloadReleaseChannels, channel, pwm);
       continue;
     }
     const lat = Number(fields[8]);
@@ -1152,6 +1324,7 @@ function parseWaypointsFile(text, fileName) {
       altitudeMode: frame === 0 || frame === 5 ? "absolute" : frame === 6 || frame === 10 ? "terrain" : "relative"
     });
     if (waypoint) {
+      pendingPayloadReleaseChannels.clear();
       waypoint.speedSetting = activeSpeedSetting;
       waypoint.speedChanged = Boolean(activeSpeedSetting && (
         !previousWaypointSpeedSetting
@@ -1166,16 +1339,45 @@ function parseWaypointsFile(text, fileName) {
   return points;
 }
 
+function isPayloadReleaseServoOutput(channel, pwm) {
+  const expectedOutput = PAYLOAD_RELEASE_CHANNELS.get(channel);
+  return expectedOutput
+    && Number.isFinite(pwm)
+    && pwm >= expectedOutput.minPwm
+    && pwm <= expectedOutput.maxPwm;
+}
+
+function recordPayloadReleaseOutput(points, pendingChannels, channel, pwm) {
+  if (!isPayloadReleaseServoOutput(channel, pwm)) return;
+  pendingChannels.add(channel);
+  if ([...PAYLOAD_RELEASE_CHANNELS.keys()].every(expectedChannel => pendingChannels.has(expectedChannel))) {
+    const previousWaypoint = points[points.length - 1];
+    if (previousWaypoint) previousWaypoint.dropActionCount += 1;
+    pendingChannels.clear();
+  }
+}
+
+function markDropPoint(points) {
+  const previousWaypoint = points[points.length - 1];
+  if (previousWaypoint) previousWaypoint.dropPoint = true;
+}
+
+function hasDropPoint(waypoint) {
+  return Boolean(waypoint?.dropPoint || waypoint?.dropActionCount > 0);
+}
+
 function makeWaypoint({ lat, lon, altitude = 100, frame = 3, sequence, command = 16, name, altitudeMode = "relative" }) {
   if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180 || (lat === 0 && lon === 0)) return null;
   if (!Number.isFinite(altitude)) throw new Error(`Waypoint ${sequence ?? ""} has an invalid altitude.`);
   return {
     id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
     lat, lon, altitude, frame, sequence, command, name, altitudeMode,
+    dropPoint: false,
     dropActionCount: 0,
     wind: null, gust: null, forecastTime: null, sampledAltitude: null, altitudeNote: "",
     etaTimestamp: null, groundSpeed: null, airSpeed: null, speedSetting: null, speedChanged: false, estimateNote: "",
     estimatedUsedMah: null, estimatedCurrentA: null, cumulativeEstimatedMah: null, estimatedVoltage: null,
+    estimatedVoltageLoadAdjustmentV: null,
     legPayloadKg: null, verticalSpeedMps: null, verticalCurrentAdjustmentA: null,
     actualPassedAt: null,
     actualUsedMah: null, actualCumulativeMah: null, cumulativeActualMah: null
@@ -1344,6 +1546,7 @@ async function fetchForecastForMission() {
     waypoint.verticalCurrentAdjustmentA = null;
     waypoint.cumulativeEstimatedMah = null;
     waypoint.estimatedVoltage = null;
+    waypoint.estimatedVoltageLoadAdjustmentV = null;
   });
   updateEnergySummary();
   drawEnergyCharts();
@@ -1386,6 +1589,7 @@ async function fetchForecastForMission() {
       waypoint.verticalCurrentAdjustmentA = null;
       waypoint.cumulativeEstimatedMah = null;
       waypoint.estimatedVoltage = null;
+      waypoint.estimatedVoltageLoadAdjustmentV = null;
     });
     renderWaypoints();
     console.error("Could not retrieve the wind forecast:", error);
@@ -1409,20 +1613,16 @@ function waypointPhaseLabels(waypoint, index) {
   if ([21, 85].includes(waypoint.command)) phases.push("Landing");
 
   const previousWaypoint = index > 0 ? state.waypoints[index - 1] : null;
-  const altitude = Number.isFinite(waypoint.targetAltitudeAgl) ? waypoint.targetAltitudeAgl : waypoint.altitude;
-  const previousAltitude = previousWaypoint
-    ? Number.isFinite(previousWaypoint.targetAltitudeAgl) ? previousWaypoint.targetAltitudeAgl : previousWaypoint.altitude
+  const altitudeChange = previousWaypoint
+    ? altitudeChangeBetweenWaypoints(previousWaypoint, waypoint)
     : null;
-  if (Number.isFinite(previousAltitude) && Number.isFinite(altitude)) {
-    const altitudeChange = altitude - previousAltitude;
+  if (Number.isFinite(altitudeChange)) {
     if (altitudeChange > PHASE_ALTITUDE_TOLERANCE_METERS) phases.push("Climbing");
     else if (altitudeChange < -PHASE_ALTITUDE_TOLERANCE_METERS) phases.push("Descending");
-    else phases.push("Level");
-  } else if (!phases.length) {
-    phases.push("Level");
+    else phases.push("Cruise");
   }
 
-  if (waypoint.dropActionCount > 0) phases.push("Dropping");
+  if (hasDropPoint(waypoint)) phases.push("Dropping");
   return phases;
 }
 
@@ -1452,7 +1652,7 @@ function missionCommandLabel(waypoint) {
 function markerIcon(waypoint, index, selected) {
   const number = waypointNumber(waypoint, index);
   const gust = Number.isFinite(waypoint.gust) ? `${waypoint.gust.toFixed(1)} m/s` : null;
-  const dropEstimate = waypoint.dropActionCount && Number.isFinite(waypoint.etaTimestamp)
+  const dropEstimate = hasDropPoint(waypoint) && Number.isFinite(waypoint.etaTimestamp)
     ? `<div class="map-drop-label"><span>DROP ${formatArrivalTime(waypoint.etaTimestamp)}</span></div>`
     : "";
   const wind = waypoint.wind
@@ -1496,7 +1696,7 @@ function popupContent(waypoint, index) {
     ? `<div class="popup-wind">${waypoint.wind.speed.toFixed(1)} m/s · wind from ${Math.round(waypoint.wind.direction)}° (${describeWindDirection(waypoint.wind.direction)})</div><div class="popup-detail">10 m gust: ${gust}</div><div class="popup-detail">Wind altitude: ${waypoint.targetAltitudeAgl.toFixed(0)} m AGL · forecast level ${waypoint.wind.altitude.toFixed(0)} m</div>`
     : '<div class="popup-detail">Wind forecast not loaded</div>';
   const estimate = Number.isFinite(waypoint.etaTimestamp)
-    ? `<div class="popup-detail">Estimated arrival: ${formatArrivalTime(waypoint.etaTimestamp)}</div>${waypoint.dropActionCount ? `<div class="popup-detail">Estimated drop: ${formatArrivalTime(waypoint.etaTimestamp)} (${waypoint.dropActionCount} DO_SET_SERVO action${waypoint.dropActionCount === 1 ? "" : "s"})</div>` : ""}<div class="popup-detail">Wind sample: ${formatForecastTime(waypoint.forecastTime)} UTC</div><div class="popup-detail">Ground speed: ${Number.isFinite(waypoint.groundSpeed) ? `${waypoint.groundSpeed.toFixed(1)} m/s` : "Mission start"}</div><div class="popup-detail">Airspeed: ${Number.isFinite(waypoint.airSpeed) ? `${waypoint.airSpeed.toFixed(1)} m/s` : "Unavailable"}</div>${Number.isFinite(waypoint.estimatedUsedMah) && Number.isFinite(waypoint.estimatedVoltage) ? `<div class="popup-detail">Estimated battery use: ${Math.round(waypoint.estimatedUsedMah)} mAh · voltage ${waypoint.estimatedVoltage.toFixed(1)} V</div>` : ""}`
+    ? `<div class="popup-detail">Estimated arrival: ${formatArrivalTime(waypoint.etaTimestamp)}</div>${hasDropPoint(waypoint) ? `<div class="popup-detail">Estimated payload drop: ${formatArrivalTime(waypoint.etaTimestamp)}${waypoint.dropActionCount ? ` (${waypoint.dropActionCount} release${waypoint.dropActionCount === 1 ? "" : "s"})` : ""}</div>` : ""}<div class="popup-detail">Wind sample: ${formatForecastTime(waypoint.forecastTime)} UTC</div><div class="popup-detail">Ground speed: ${Number.isFinite(waypoint.groundSpeed) ? `${waypoint.groundSpeed.toFixed(1)} m/s` : "Mission start"}</div><div class="popup-detail">Airspeed: ${Number.isFinite(waypoint.airSpeed) ? `${waypoint.airSpeed.toFixed(1)} m/s` : "Unavailable"}</div>${Number.isFinite(waypoint.estimatedUsedMah) && Number.isFinite(waypoint.estimatedVoltage) ? `<div class="popup-detail">Estimated battery use: ${Math.round(waypoint.estimatedUsedMah)} mAh · voltage ${waypoint.estimatedVoltage.toFixed(1)} V</div>` : ""}`
     : waypoint.estimateNote ? `<div class="popup-detail">${escapeHtml(waypoint.estimateNote)}</div>` : "";
   return `<div class="popup-title">${escapeHtml(waypoint.name || `Waypoint ${index + 1}`)}</div><div class="popup-detail">${waypoint.lat.toFixed(5)}, ${waypoint.lon.toFixed(5)}</div><div class="popup-detail">Mission altitude: ${waypoint.altitude} m</div>${estimate}${wind}`;
 }
@@ -1629,7 +1829,7 @@ function renderWaypoints() {
       ? `<span class="estimate-mark current-mark" style="--mark-hue:${120 - colorScaleHue(waypoint.estimatedCurrentA, MIN_ESTIMATED_CURRENT_AMPS, REFERENCE_CURRENT_P95_AMPS)}" title="Estimated current; red begins at the log p95 of ${REFERENCE_CURRENT_P95_AMPS} A">${waypoint.estimatedCurrentA.toFixed(1)} A</span>`
       : "—";
     const estimatedVoltage = Number.isFinite(waypoint.estimatedVoltage)
-      ? `<span class="estimate-mark voltage-mark" style="--mark-hue:${colorScaleHue(waypoint.estimatedVoltage, FLIGHT_REFERENCE.minimumVoltage, FLIGHT_REFERENCE.voltageSamples[0].voltage)}" title="Estimated voltage from ${FLIGHT_REFERENCE.minimumVoltage.toFixed(1)} V logged minimum to ${FLIGHT_REFERENCE.voltageSamples[0].voltage.toFixed(1)} V full-charge reference">${waypoint.estimatedVoltage.toFixed(1)} V</span>`
+      ? `<span class="estimate-mark voltage-mark" style="--mark-hue:${colorScaleHue(waypoint.estimatedVoltage, FLIGHT_REFERENCE.minimumVoltage, FLIGHT_REFERENCE.voltageSamples[0].voltage)}" title="Reference voltage adjusted for ${Number.isFinite(waypoint.estimatedCurrentA) ? `${waypoint.estimatedCurrentA.toFixed(1)} A estimated current` : "estimated takeoff current"}; load adjustment ${waypoint.estimatedVoltageLoadAdjustmentV.toFixed(2)} V">${waypoint.estimatedVoltage.toFixed(1)} V</span>`
       : "—";
     const estimatedCumulative = Number.isFinite(waypoint.cumulativeEstimatedMah) ? Math.round(waypoint.cumulativeEstimatedMah).toLocaleString() : "—";
     const phaseLabels = waypointPhaseLabels(waypoint, index);
@@ -1640,8 +1840,12 @@ function renderWaypoints() {
     const realCumulativeValue = Number.isFinite(waypoint.actualCumulativeMah) ? escapeHtml(waypoint.actualCumulativeMah) : "";
     const realUsed = Number.isFinite(waypoint.actualUsedMah) ? Math.round(waypoint.actualUsedMah).toLocaleString() : "—";
     const realCumulative = Number.isFinite(waypoint.actualCumulativeMah) ? Math.round(waypoint.actualCumulativeMah).toLocaleString() : "—";
-    return `<tr class="mission-row${waypoint.id === state.selectedWaypoint ? " selected" : ""}${waypoint.dropActionCount ? " drop-point" : ""}" data-id="${escapeHtml(waypoint.id)}">
-      <td><button class="table-waypoint-name" type="button" data-action="select">${waypointNumber(waypoint, index)} · ${escapeHtml(waypoint.name || `Waypoint ${index + 1}`)}</button><span class="table-coordinates">${waypoint.lat.toFixed(5)}, ${waypoint.lon.toFixed(5)}</span></td>
+    const dropPoint = hasDropPoint(waypoint);
+    const dropMarker = dropPoint
+      ? `<span class="table-drop-marker" title="This waypoint is immediately before a DO_SET_SERVO payload release">${waypoint.dropActionCount > 1 ? `DROP POINT · ${waypoint.dropActionCount} RELEASES` : "DROP POINT"}</span>`
+      : "";
+    return `<tr class="mission-row${waypoint.id === state.selectedWaypoint ? " selected" : ""}${dropPoint ? " drop-point" : ""}" data-id="${escapeHtml(waypoint.id)}">
+      <td><div class="table-waypoint-heading"><button class="table-waypoint-name" type="button" data-action="select">${waypointNumber(waypoint, index)} · ${escapeHtml(waypoint.name || `Waypoint ${index + 1}`)}</button>${dropMarker}</div><span class="table-coordinates">${waypoint.lat.toFixed(5)}, ${waypoint.lon.toFixed(5)}</span></td>
       <td>${escapeHtml(speedCommand)}${waypoint.speedChanged ? '<span class="speed-changed">CHANGED</span>' : ""}</td>
       <td><input class="table-altitude-input" type="number" step="1" value="${escapeHtml(waypoint.altitude)}" data-action="altitude" aria-label="Waypoint ${waypointNumber(waypoint, index)} altitude in meters"><span class="print-only">${escapeHtml(waypoint.altitude)} m</span></td>
       <td>${escapeHtml(wind)}</td>
@@ -1727,6 +1931,7 @@ function cancelForecastRequest() {
     waypoint.verticalCurrentAdjustmentA = null;
     waypoint.cumulativeEstimatedMah = null;
     waypoint.estimatedVoltage = null;
+    waypoint.estimatedVoltageLoadAdjustmentV = null;
   });
   updateEnergySummary();
   drawEnergyCharts();
@@ -1745,7 +1950,7 @@ function zoomToMission() {
 
 function exportCsv() {
   const rows = [
-    ["Takeoff time", "Payload (kg)", "Battery capacity (mAh)", "Departure voltage (V)", "Waypoint", "Command ID", "Mission Planner command", "Speed command", "Speed changed at waypoint", "Latitude", "Longitude", "Mission altitude (m)", "Altitude above ground (m)", "Ground elevation (m)", "Wind speed (m/s)", "Wind gust at 10 m (m/s)", "Wind direction (degrees from north)", "Wind direction", "Ground speed (m/s)", "Airspeed (m/s)", "Estimated arrival", "Forecast time UTC", "Payload on leg (kg)", "Estimated vertical rate (m/s)", "Vertical current adjustment (A)", "Estimated current (A)", "Estimated leg used (mAh)", "Cumulative estimated used (mAh)", "Real leg used (mAh)", "Cumulative real used (mAh)", "Estimated voltage (V)", "Actual pass time", "Pass time versus ETA"],
+    ["Takeoff time", "Payload (kg)", "Battery capacity (mAh)", "Departure voltage (V)", "Waypoint", "Command ID", "Mission Planner command", "Speed command", "Speed changed at waypoint", "Latitude", "Longitude", "Mission altitude (m)", "Altitude above ground (m)", "Ground elevation (m)", "Wind speed (m/s)", "Wind gust at 10 m (m/s)", "Wind direction (degrees from north)", "Wind direction", "Ground speed (m/s)", "Airspeed (m/s)", "Estimated arrival", "Forecast time UTC", "Payload on leg (kg)", "Estimated vertical rate (m/s)", "Vertical current adjustment (A)", "Estimated current (A)", "Estimated leg used (mAh)", "Cumulative estimated used (mAh)", "Real leg used (mAh)", "Cumulative real used (mAh)", "Estimated voltage (V)", "Voltage load adjustment (V)", "Actual pass time", "Pass time versus ETA"],
     ...state.waypoints.map((point, index) => [
       elements.takeoffTime.value ? `${new Date(elements.takeoffTime.value).toISOString().replace("T", " ").slice(0, 16)} UTC` : "",
       elements.payloadWeight.value,
@@ -1780,6 +1985,7 @@ function exportCsv() {
       Number.isFinite(point.actualUsedMah) ? Math.round(point.actualUsedMah) : "",
       Number.isFinite(point.actualCumulativeMah) ? Math.round(point.actualCumulativeMah) : "",
       Number.isFinite(point.estimatedVoltage) ? point.estimatedVoltage.toFixed(2) : "",
+      Number.isFinite(point.estimatedVoltageLoadAdjustmentV) ? point.estimatedVoltageLoadAdjustmentV.toFixed(2) : "",
       Number.isFinite(point.actualPassedAt) ? `${new Date(point.actualPassedAt).toISOString().replace("T", " ").slice(0, 19)} UTC` : "",
       passTimeDifference(point).label
     ])

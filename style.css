@@ -165,7 +165,10 @@ button { color: inherit; }
 .summary-heading > span { color: #9aa5b4; font-size: 8px; font-weight: 700; letter-spacing: .65px; }
 .summary-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; color: #78859a; font-size: 10px; }
 .summary-row strong { color: #34445a; font-size: 10px; font-weight: 700; text-align: right; }
+.summary-row strong.pressure-change--increase { color: #b35341; }
+.summary-row strong.pressure-change--decrease { color: #388a72; }
 .summary-drops { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; color: #34445a; font-size: 10px; font-weight: 700; text-align: right; }
+.summary-note { margin: 3px 0; color: #929eaa; font-size: 8px; line-height: 1.45; }
 .section-heading, .waypoints-heading, .section-heading > div, .waypoints-heading > div { display: flex; align-items: center; }
 .section-heading, .waypoints-heading { justify-content: space-between; }
 .section-heading > div, .waypoints-heading > div { gap: 9px; }
@@ -330,7 +333,9 @@ body.panel-resizing[data-resize-axis="row"], body.panel-resizing[data-resize-axi
 .mission-row.drop-point td { background: #fff3dd; }
 .mission-row.drop-point:hover td { background: #ffedcb; }
 .mission-row.drop-point.selected td { background: #fce5b5; }
-.table-waypoint-name { display: block; padding: 0; color: #238d74; background: none; border: 0; font-size: 12px; font-weight: 700; text-align: left; cursor: pointer; }
+.table-waypoint-heading { display: flex; align-items: center; gap: 7px; }
+.table-waypoint-name { padding: 0; color: #238d74; background: none; border: 0; font-size: 12px; font-weight: 700; text-align: left; cursor: pointer; }
+.table-drop-marker { display: inline-flex; align-items: center; padding: 5px 7px; color: #75420e; background: #ffe0a6; border: 1px solid #efc779; border-radius: 4px; font-size: 10px; font-weight: 800; letter-spacing: .3px; line-height: 1; }
 .table-coordinates, .table-subtext { display: block; margin-top: 3px; color: #919dad; font-size: 10px; }
 .phase-labels { display: flex; flex-wrap: wrap; gap: 4px; }
 .phase-label { display: inline-flex; padding: 3px 6px; color: #466276; background: #edf3f5; border-radius: 4px; font-size: 10px; font-weight: 700; }
@@ -671,6 +676,7 @@ body.panel-resizing[data-resize-axis="row"], body.panel-resizing[data-resize-axi
 :root[data-theme="dark"] .mission-row.drop-point td { background: #3b3326; }
 :root[data-theme="dark"] .mission-row.drop-point:hover td { background: #4a3d29; }
 :root[data-theme="dark"] .mission-row.drop-point.selected td { background: #504128; }
+:root[data-theme="dark"] .table-drop-marker { color: #ffe0a6; background: #55432c; border-color: #80633b; }
 :root[data-theme="dark"] .chart-cumulative-actual-point { stroke: #1c2837; }
 :root[data-theme="dark"] .mission-row.selected td { background: #203d35; }
 :root[data-theme="dark"] .command-id { color: #d4dfeb; }
@@ -706,6 +712,9 @@ body.panel-resizing[data-resize-axis="row"], body.panel-resizing[data-resize-axi
 :root[data-theme="dark"] .summary-drops,
 :root[data-theme="dark"] .empty-state strong,
 :root[data-theme="dark"] .map-coordinates { color: #d4dfeb; }
+:root[data-theme="dark"] .summary-row strong.pressure-change--increase { color: #f0a3a5; }
+:root[data-theme="dark"] .summary-row strong.pressure-change--decrease { color: #91ddbd; }
+:root[data-theme="dark"] .summary-note { color: #94a3b6; }
 :root[data-theme="dark"] .waypoint-badge,
 :root[data-theme="dark"] .waypoint-marker-inner { background-color: #34465d; }
 :root[data-theme="dark"] .waypoint-card:hover { background: #202e3d; border-color: #3d655c; }
