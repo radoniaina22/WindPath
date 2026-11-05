@@ -65,6 +65,11 @@
               <span class="button-label">Check waypoint winds</span>
               <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h12m0 0-5-5m5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
+            <div class="wind-check-timer" role="timer" aria-label="Time since the last successful wind check">
+              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M10 6v4l2.5 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+              <span>Since last wind check</span>
+              <strong id="windCheckElapsed">--:--:--</strong>
+            </div>
             <div class="api-note"><span class="api-check">✓</span> Uses <strong>DO_CHANGE_SPEED</strong> (airspeed or groundspeed) with hourly wind</div>
           </section>
 
@@ -164,7 +169,33 @@
       </aside>
 
       <main class="workspace-area">
+        <section class="print-report-cover print-only-report" aria-labelledby="printReportTitle">
+          <header class="print-report-header">
+            <div>
+              <span class="print-report-kicker">WINDPATH · FLIGHT OPERATIONS</span>
+              <h1 id="printReportTitle">Flight plan report</h1>
+              <p id="printMissionName">Mission route</p>
+            </div>
+            <div class="print-report-issued">
+              <span>REPORT GENERATED</span>
+              <strong id="printGeneratedAt">—</strong>
+              <small id="printForecastStatus">Forecast status unavailable</small>
+            </div>
+          </header>
+          <div class="print-metric-grid" id="printMetricGrid"></div>
+          <section class="print-event-timeline" aria-labelledby="printTimelineTitle">
+            <div class="print-section-heading">
+              <span>MISSION TIMELINE</span>
+              <h2 id="printTimelineTitle">Planned and recorded times</h2>
+            </div>
+            <div class="print-timeline-grid" id="printTimelineGrid"></div>
+          </section>
+        </section>
         <section class="map-stage" aria-label="Mission map">
+          <div class="print-map-title print-only-report">
+            <div><span>ROUTE OVERVIEW</span><strong>Flight plan map</strong></div>
+            <span>Waypoint order · planned drop point · route path</span>
+          </div>
           <div class="map-topbar">
             <form id="searchForm" class="search-box">
               <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="8.7" cy="8.7" r="5.6" stroke="currentColor" stroke-width="1.5"/><path d="m13 13 3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
@@ -222,14 +253,55 @@
             <div class="battery-budget-legend" aria-hidden="true"><span><i class="budget-swatch budget-swatch-used"></i>Use</span><span><i class="budget-swatch budget-swatch-reserve"></i>Reserve</span><span><i class="budget-swatch budget-swatch-remaining"></i>Free</span></div>
             <p class="battery-budget-status" id="batteryBudgetStatus" aria-live="polite">Check waypoint winds to calculate the route budget.</p>
           </section>
-          <div class="energy-chart-heading"><strong>Used mAh by waypoint leg</strong><span>estimate vs real</span></div>
-          <div class="energy-chart-scroll"><svg id="consumptionChart" class="energy-chart" role="img" aria-label="Estimated and real battery use by waypoint"></svg></div>
-          <div class="energy-chart-heading"><strong>Cumulative used mAh</strong><span>estimate vs real</span></div>
-          <div class="energy-chart-scroll"><svg id="cumulativeChart" class="energy-chart" role="img" aria-label="Estimated and real cumulative battery use by waypoint"></svg></div>
-          <div class="energy-chart-heading voltage-chart-heading"><strong>Estimated battery voltage</strong><span>capacity + load</span></div>
-          <div class="energy-chart-scroll"><svg id="voltageChart" class="energy-chart voltage-chart" role="img" aria-label="Estimated battery voltage at each waypoint"></svg></div>
+          <section class="print-real-synthesis print-only-report" aria-labelledby="printSynthesisTitle">
+            <div class="print-section-heading">
+              <span>RECORDED FLIGHT DATA</span>
+              <h3 id="printSynthesisTitle">Real-data synthesis</h3>
+            </div>
+            <div class="print-synthesis-grid" id="printSynthesisGrid"></div>
+          </section>
+          <div class="energy-chart-grid">
+            <section class="energy-chart-card">
+              <div class="energy-chart-heading"><strong>Used mAh by waypoint leg</strong><span>estimate vs real</span></div>
+              <div class="energy-chart-scroll"><svg id="consumptionChart" class="energy-chart" role="img" aria-label="Estimated and real battery use by waypoint"></svg></div>
+            </section>
+            <section class="energy-chart-card">
+              <div class="energy-chart-heading"><strong>Cumulative used mAh</strong><span>estimate vs real</span></div>
+              <div class="energy-chart-scroll"><svg id="cumulativeChart" class="energy-chart" role="img" aria-label="Estimated and real cumulative battery use by waypoint"></svg></div>
+            </section>
+            <section class="energy-chart-card">
+              <div class="energy-chart-heading voltage-chart-heading"><strong>Estimated battery voltage</strong><span>capacity + load</span></div>
+              <div class="energy-chart-scroll"><svg id="voltageChart" class="energy-chart voltage-chart" role="img" aria-label="Estimated battery voltage at each waypoint"></svg></div>
+            </section>
+          </div>
           <p class="energy-method">Each waypoint voltage uses the full reference discharge curve plus an estimated load-sag correction relative to the reference flight's 14.44 A average. Pack resistance is fitted at 34.06 mΩ from the new battery logs; cell temperature, battery age, and transient sag can change actual voltage.</p>
         </aside>
+        <section class="print-waypoint-report print-only-report" aria-labelledby="printWaypointTitle">
+          <header class="print-waypoint-header">
+            <div class="print-section-heading">
+              <span>ROUTE DETAIL</span>
+              <h2 id="printWaypointTitle">Waypoint and flight-data record</h2>
+            </div>
+            <p id="printWaypointNote">Estimate and measured values are shown separately.</p>
+          </header>
+          <table class="print-waypoint-table">
+            <thead>
+              <tr>
+                <th scope="col">Waypoint</th>
+                <th scope="col">Coordinates</th>
+                <th scope="col">Altitude</th>
+                <th scope="col">ETA / actual pass</th>
+                <th scope="col">Airspeed / wind</th>
+                <th scope="col">Phase / payload</th>
+                <th scope="col">Estimated mAh<br>leg / cumulative</th>
+                <th scope="col">Recorded mAh<br>leg / cumulative</th>
+                <th scope="col">Est. voltage</th>
+              </tr>
+            </thead>
+            <tbody id="printWaypointRows"></tbody>
+          </table>
+          <footer class="print-report-footnote">ETAs, wind, battery use, and voltage are estimates. Recorded mAh and pass times are only shown where entered. Real leg mAh is derived from consecutive cumulative readings.</footer>
+        </section>
         <section class="waypoint-table-panel" aria-labelledby="waypointTableTitle">
           <div class="panel-resize panel-resize--horizontal" id="tableResize" role="separator" aria-label="Resize waypoint table height" aria-orientation="horizontal" tabindex="0" title="Drag or use arrow keys to resize; Home resets"></div>
           <div class="waypoints-heading">
@@ -251,18 +323,16 @@
               <thead>
                 <tr>
                   <th scope="col"># / Name</th>
-                  <th scope="col">Airspeed</th>
                   <th scope="col">Altitude</th>
                   <th scope="col">Wind</th>
-                  <th scope="col">Ground speed</th>
                   <th scope="col">ETA</th>
                   <th scope="col">Flight phase</th>
-                  <th scope="col">Est. leg mAh</th>
                   <th scope="col" title="Color scales from green at low current to red at the log p95 of 35.21 A">Est. current</th>
                   <th scope="col" title="Voltage mark colors map the logged range from low red to full-charge green">Est. voltage</th>
+                  <th scope="col">Est. leg mAh</th>
                   <th scope="col">Est. cumul. mAh</th>
-                  <th scope="col" title="Derived from adjacent cumulative readings">Real leg mAh (derived)</th>
-                  <th scope="col" title="Enter the battery counter's cumulative used mAh at this waypoint">Real cumul. mAh (input)</th>
+                  <th scope="col" title="Derived real leg mAh and estimate variance = estimated leg mAh minus real leg mAh">Real leg / variance</th>
+                  <th scope="col" title="Enter the battery counter's cumulative used mAh; comparison below is estimated cumulative mAh minus real cumulative mAh">Real cumul. mAh (input)</th>
                   <th scope="col" title="Mark the real pass time and compare it with the ETA">Pass time / Δ ETA</th>
                   <th scope="col">Actions</th>
                 </tr>

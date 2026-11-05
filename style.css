@@ -138,6 +138,8 @@ button { color: inherit; }
 .energy-warning[hidden] { display: none; }
 .energy-chart-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 12px; color: #34445a; font-size: 9px; }
 .energy-chart-heading span { color: #929eaa; font-size: 8px; }
+.energy-chart-grid { display: contents; }
+.energy-chart-card { display: contents; }
 .voltage-chart-heading { margin-top: 7px; }
 .energy-chart-scroll { overflow: hidden; margin: 3px -4px 0; }
 .energy-chart { display: block; width: 100%; min-width: 0; height: 170px; }
@@ -206,6 +208,9 @@ button { color: inherit; }
 .primary-button:hover:not(:disabled) { background: var(--green-dark); transform: translateY(-1px); }
 .primary-button:disabled { background: #b5c8c2; box-shadow: none; cursor: not-allowed; }
 .primary-button svg { width: 16px; height: 16px; }
+.wind-check-timer { display: flex; align-items: center; justify-content: center; gap: 5px; margin-top: 8px; color: #7f8c9c; font-size: 9px; }
+.wind-check-timer svg { width: 13px; height: 13px; flex: 0 0 13px; }
+.wind-check-timer strong { color: #238d74; font-size: 10px; font-variant-numeric: tabular-nums; letter-spacing: .35px; }
 .api-note { display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: 10px; color: #929eaa; font-size: 8px; }
 .api-note strong { color: #69798a; font-weight: 700; }
 .api-check { display: grid; width: 12px; height: 12px; margin-right: 2px; place-items: center; color: #268969; background: #e8f6f0; border-radius: 50%; font-size: 8px; font-weight: 700; }
@@ -218,7 +223,7 @@ button { color: inherit; }
 .export-button:disabled { color: #bcc4ce; cursor: default; }
 .export-button svg { width: 14px; height: 14px; }
 .waypoint-report-actions { display: flex; align-items: center; gap: 14px; }
-.print-only { display: none; }
+.print-only, .print-only-report { display: none; }
 .empty-state { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; min-height: 92px; gap: 4px; color: #9aa5b4; text-align: center; }
 .empty-state[hidden] { display: none; }
 .empty-icon { display: grid; width: 38px; height: 38px; margin-bottom: 5px; place-items: center; color: #a4b8b0; background: #f4f8f6; border-radius: 12px; }
@@ -353,7 +358,20 @@ body.panel-resizing[data-resize-axis="row"], body.panel-resizing[data-resize-axi
 .speed-changed { display: inline-block; margin-left: 5px; padding: 2px 4px; color: #9c5e17; background: #fff0d4; border-radius: 4px; font-size: 9px; font-weight: 800; }
 .command-id { color: #34445a; font-weight: 700; }
 .numeric-cell { font-variant-numeric: tabular-nums; text-align: right; }
+.leg-consumption-cell > .real-leg-value { display: block; }
+.leg-consumption-cell > .consumption-variance { margin-top: 4px; }
+.cumulative-consumption-cell > .consumption-variance { display: flex; margin-top: 4px; justify-content: flex-end; }
+.real-leg-value { color: #34445a; font-weight: 700; }
 .estimate-mark { display: inline-flex; min-width: 66px; justify-content: center; padding: 4px 7px; color: hsl(var(--mark-hue) 54% 29%); background: hsl(var(--mark-hue) 76% 91%); border: 1px solid hsl(var(--mark-hue) 53% 78%); border-radius: 4px; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.consumption-variance { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.consumption-variance strong { font-variant-numeric: tabular-nums; }
+.consumption-variance.negative { color: #b44952; }
+.consumption-variance.positive { color: #18735c; }
+.consumption-variance.neutral { color: #657487; }
+.consumption-percent { padding: 3px 5px; border-radius: 999px; font-size: 10px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.consumption-variance.negative .consumption-percent { color: #a43f48; background: #fbe8e9; }
+.consumption-variance.positive .consumption-percent { color: #146b55; background: #e2f5ec; }
+.consumption-variance.neutral .consumption-percent { color: #5c6a7b; background: #eef2f5; }
 .table-real-input { width: 82px; padding: 5px 6px; color: #49576c; background: #fff; border: 1px solid #e3e9ee; border-radius: 5px; font-size: 12px; text-align: right; }
 .table-altitude-input { width: 62px; padding: 5px 5px; color: #49576c; background: #fff; border: 1px solid #e3e9ee; border-radius: 5px; font-size: 12px; text-align: right; }
 .table-remove-button { width: 24px; height: 24px; color: #a45b60; background: transparent; border: 1px solid #f0dddd; border-radius: 5px; font-size: 16px; cursor: pointer; }
@@ -422,8 +440,14 @@ body.panel-resizing[data-resize-axis="row"], body.panel-resizing[data-resize-axi
 .live-drone-symbol { display: grid; width: 36px; height: 36px; flex: 0 0 36px; place-items: center; background: #167f68; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 2px 9px rgb(27 55 48 / 38%); }
 .live-drone-plane { width: 21px; height: 21px; fill: #fff; transition: transform .3s ease; }
 .live-drone-details { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
-.live-drone-status, .live-drone-speeds { padding: 3px 6px; color: #176e5c; background: rgb(255 255 255 / 96%); border: 1px solid #cfe7dd; border-radius: 6px; box-shadow: 0 2px 8px rgb(36 53 60 / 15%); font-size: 8px; font-weight: 800; letter-spacing: .3px; white-space: nowrap; }
+.live-drone-status, .live-drone-speeds, .live-drone-position { padding: 3px 6px; color: #176e5c; background: rgb(255 255 255 / 96%); border: 1px solid #cfe7dd; border-radius: 6px; box-shadow: 0 2px 8px rgb(36 53 60 / 15%); font-size: 8px; font-weight: 800; letter-spacing: .3px; white-space: nowrap; }
 .live-drone-speeds { color: #34465b; font-variant-numeric: tabular-nums; }
+.live-drone-position { color: #536477; font-variant-numeric: tabular-nums; }
+.live-drone-air-change { padding: 3px 6px; color: #9c5e17; background: #fff0d4; border: 1px solid #efc779; border-radius: 6px; box-shadow: 0 2px 8px rgb(36 53 60 / 15%); font-size: 8px; font-weight: 800; letter-spacing: .2px; white-space: nowrap; }
+.reference-drone-marker { width: 30px; height: 30px; background: transparent; border: 0; opacity: .38; filter: grayscale(1); pointer-events: none; }
+.reference-drone-symbol { display: grid; width: 26px; height: 26px; place-items: center; background: #566575; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 2px 7px rgb(27 38 48 / 45%); }
+.reference-drone-plane { width: 16px; height: 16px; fill: #fff; transition: transform .3s ease; }
+.reference-drone-badge { margin-left: 5px; padding: 4px 6px; color: #3d4d5e; background: rgb(255 255 255 / 96%); border: 1px solid #d4dce2; border-radius: 6px; box-shadow: 0 2px 7px rgb(36 53 60 / 15%); font-size: 8px; font-weight: 800; letter-spacing: .35px; white-space: nowrap; }
 .leaflet-control-attribution { font-size: 8px !important; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -771,7 +795,16 @@ body.panel-resizing[data-resize-axis="row"], body.panel-resizing[data-resize-axi
 :root[data-theme="dark"] .map-drop-label span { color: #f0b879; background: rgb(25 37 51 / 96%); border-color: #405064; }
 :root[data-theme="dark"] .live-drone-symbol { background: #218c72; border-color: #d3e2e8; }
 :root[data-theme="dark"] .live-drone-status,
-:root[data-theme="dark"] .live-drone-speeds { color: #a4ead3; background: rgb(25 37 51 / 96%); border-color: #405f59; }
+:root[data-theme="dark"] .live-drone-speeds,
+:root[data-theme="dark"] .live-drone-position { color: #a4ead3; background: rgb(25 37 51 / 96%); border-color: #405f59; }
+:root[data-theme="dark"] .live-drone-air-change { color: #f0c77f; background: #3a3020; border-color: #66522f; }
+:root[data-theme="dark"] .consumption-variance.negative { color: #f0a3a5; }
+:root[data-theme="dark"] .consumption-variance.positive { color: #91ddbd; }
+:root[data-theme="dark"] .consumption-variance.neutral { color: #bdc9d7; }
+:root[data-theme="dark"] .consumption-variance.negative .consumption-percent { color: #f0a3a5; background: #4a2d35; }
+:root[data-theme="dark"] .consumption-variance.positive .consumption-percent { color: #91ddbd; background: #203d35; }
+:root[data-theme="dark"] .consumption-variance.neutral .consumption-percent { color: #bdc9d7; background: #2b3948; }
+:root[data-theme="dark"] .reference-drone-badge { color: #c3cfdb; background: rgb(25 37 51 / 96%); border-color: #405064; }
 :root[data-theme="dark"] .leaflet-control-zoom a {
   color: #e0e9f2;
   background: #1c2837;
@@ -798,3 +831,102 @@ body.panel-resizing[data-resize-axis="row"], body.panel-resizing[data-resize-axi
 :root[data-theme="dark"] .message { color: #b6d6e5; background: #203443; }
 :root[data-theme="dark"] .message.error { color: #f0b5b6; background: #40272d; }
 :root[data-theme="dark"] .primary-button:disabled { background: #40584f; }
+:root[data-theme="dark"] .wind-check-timer { color: #a4b2c4; }
+:root[data-theme="dark"] .wind-check-timer strong { color: #91ddbd; }
+
+@page {
+  size: A4 landscape;
+  margin: 14mm 14mm 16mm;
+  @bottom-left { content: "WINDPATH · FLIGHT PLAN REPORT"; color: #78869a; font: 7pt "DM Sans", sans-serif; }
+  @bottom-right { content: "Page " counter(page); color: #78869a; font: 7pt "DM Sans", sans-serif; }
+}
+
+@media print {
+  html, body { width: auto; min-width: 0; height: auto; min-height: 0; overflow: visible !important; color: #17233b; background: #fff; font-family: "DM Sans", sans-serif; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .app-shell { display: block; width: auto; height: auto; min-height: 0; overflow: visible; }
+  .sidebar { display: none !important; }
+  .workspace-area { display: flex; width: auto; height: auto; min-height: 0; flex-direction: column; gap: 0; padding: 0; overflow: visible; background: #fff; }
+  .print-only-report { display: block !important; }
+  .print-report-cover { break-inside: avoid; page-break-inside: avoid; }
+  .print-report-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12mm; padding-bottom: 3mm; border-bottom: 1px solid #d8e0e8; }
+  .print-report-kicker, .print-section-heading > span { display: block; color: #21816b; font-size: 7pt; font-weight: 800; letter-spacing: 1.1px; }
+  .print-report-header h1 { margin: 1mm 0; color: #17233b; font: 800 21pt/1.05 "Manrope", sans-serif; }
+  .print-report-header p { margin: 0; color: #5d6c80; font-size: 9pt; }
+  .print-report-issued { display: flex; min-width: 48mm; flex-direction: column; align-items: flex-end; gap: 1mm; color: #738197; text-align: right; }
+  .print-report-issued > span { font-size: 6pt; font-weight: 800; letter-spacing: .8px; }
+  .print-report-issued strong { color: #263750; font-size: 8pt; font-variant-numeric: tabular-nums; }
+  .print-report-issued small { font-size: 7pt; }
+  .print-metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3mm; margin-top: 3mm; }
+  .print-metric { display: flex; min-height: 19mm; flex-direction: column; gap: 1mm; padding: 2.5mm 3mm; background: #f4f7f9; border: 1px solid #e0e6eb; border-radius: 2mm; break-inside: avoid; }
+  .print-metric > span, .print-synthesis-card > span { color: #728096; font-size: 6.5pt; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; }
+  .print-metric strong { color: #1b725d; font: 800 13pt/1.1 "Manrope", sans-serif; font-variant-numeric: tabular-nums; }
+  .print-metric small, .print-synthesis-card small { color: #68778b; font-size: 6.5pt; line-height: 1.25; }
+  .print-event-timeline { margin-top: 3mm; padding-top: 2mm; border-top: 1px solid #e1e7ec; }
+  .print-section-heading h2, .print-section-heading h3 { margin: .7mm 0 0; color: #253650; font: 700 11pt/1.1 "Manrope", sans-serif; }
+  .print-timeline-grid { display: grid; grid-template-columns: 1fr 1.35fr 1fr; gap: 3mm; margin-top: 2mm; }
+  .print-timeline-item { min-height: 19mm; padding: 2mm 3mm; background: #fbfcfd; border-left: 1.2mm solid #318b74; break-inside: avoid; }
+  .print-timeline-drop { border-left-color: #d99939; }
+  .print-timeline-label { display: block; margin-bottom: 1mm; color: #617188; font-size: 6pt; font-weight: 800; letter-spacing: .7px; }
+  .print-timeline-item > strong { display: block; color: #20324a; font-size: 8pt; font-variant-numeric: tabular-nums; }
+  .print-timeline-item > small, .print-drop-time span { display: block; margin-top: .5mm; color: #718096; font-size: 6pt; line-height: 1.2; }
+  .print-drop-time { display: inline-block; margin-right: 4mm; margin-bottom: 1mm; vertical-align: top; }
+  .print-drop-time strong { display: block; color: #684712; font-size: 7pt; }
+  .map-stage { display: block !important; position: relative; width: 100%; max-width: none; height: 98mm; min-height: 98mm; margin: 3mm 0 0; overflow: hidden; background: #edf2f4; border: 1px solid #d7e0e6; border-radius: 2mm; break-after: page; page-break-after: always; }
+  .print-map-title { position: relative; z-index: 600; display: flex !important; height: 11mm; align-items: center; justify-content: space-between; gap: 5mm; padding: 1.5mm 3mm; background: #fff; border-bottom: 1px solid #d7e0e6; }
+  .print-map-title > div { display: flex; align-items: baseline; gap: 3mm; }
+  .print-map-title > div > span { color: #21816b; font-size: 6pt; font-weight: 800; letter-spacing: .8px; }
+  .print-map-title strong { color: #253650; font: 700 10pt "Manrope", sans-serif; }
+  .print-map-title > span { color: #728096; font-size: 6.5pt; }
+  #map { position: absolute; inset: 11mm 0 0; z-index: 0; width: auto; height: auto; }
+  .map-topbar, .map-hint, .map-coordinates, .map-footer, .mission-alert, .loading-overlay,
+  .leaflet-control-zoom, .panel-resize, .waypoint-report-actions, .waypoint-table-panel { display: none !important; }
+  .leaflet-control-attribution { font-size: 6pt !important; }
+  .energy-dashboard { display: block; position: static; width: 100%; min-height: 0; margin: 0; padding: 0; overflow: visible; background: #fff; border: 0; border-radius: 0; box-shadow: none; break-before: page; page-break-before: always; }
+  .dashboard-heading { margin-bottom: 2mm; padding-bottom: 2mm; border-bottom: 1px solid #dfe5ea; }
+  .dashboard-heading h2 { font-size: 13pt; }
+  .dashboard-heading > span { font-size: 7pt; }
+  .battery-budget { margin: 0; padding: 2mm 0; break-inside: avoid; }
+  .battery-budget-heading strong { font-size: 16pt; }
+  .battery-budget-meter { height: 3mm; margin-top: 2mm; }
+  .battery-budget-meter > span { transition: none; }
+  .battery-budget-stats { margin-top: 1mm; }
+  .battery-budget-legend, .battery-budget-status { display: none; }
+  .print-real-synthesis { margin: 2mm 0; padding: 2mm 0; border-top: 1px solid #dfe5ea; border-bottom: 1px solid #dfe5ea; break-inside: avoid; }
+  .print-synthesis-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2mm; margin-top: 2mm; }
+  .print-synthesis-card { display: flex; min-height: 15mm; flex-direction: column; gap: .8mm; padding: 2mm; background: #f6f8fa; border: 1px solid #e4e9ee; border-radius: 1.5mm; }
+  .print-synthesis-card strong { color: #273a53; font-size: 9pt; font-variant-numeric: tabular-nums; }
+  .energy-chart-heading { margin-top: 1.5mm; font-size: 7pt; break-after: avoid; }
+  .energy-chart-grid { display: flex !important; width: 100%; flex-direction: row; align-items: flex-start; gap: 4mm; }
+  .energy-chart-card { display: block; width: 0; min-width: 0; flex: 1 1 0; break-inside: avoid; page-break-inside: avoid; }
+  .energy-chart-card .energy-chart-heading { min-height: 8mm; flex-direction: column; align-items: flex-start; gap: .7mm; }
+  .energy-chart-scroll { width: 100%; height: 38mm; overflow: hidden; }
+  .energy-chart { display: block; width: 100% !important; height: 38mm !important; }
+  .energy-method { display: none; }
+  .print-waypoint-report { display: block !important; width: 100%; padding-top: 1mm; break-before: page; page-break-before: always; }
+  .print-waypoint-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 8mm; margin-bottom: 3mm; padding-bottom: 2mm; border-bottom: 1px solid #dce4ea; break-after: avoid; }
+  .print-waypoint-header p { max-width: 95mm; margin: 0; color: #6e7c90; font-size: 7pt; text-align: right; }
+  .print-waypoint-table { width: 100%; table-layout: fixed; border-collapse: collapse; color: #34445a; font-size: 7pt; }
+  .print-waypoint-table th { padding: 2mm 1.3mm; color: #44566e; background: #edf2f5; border: 1px solid #dce4ea; font-size: 6.5pt; font-weight: 800; text-align: left; vertical-align: bottom; }
+  .print-waypoint-table td { padding: 1.6mm 1.3mm; border: 1px solid #e4e9ed; line-height: 1.25; vertical-align: top; overflow-wrap: anywhere; }
+  .print-waypoint-table thead { display: table-header-group; }
+  .print-waypoint-table tr { break-inside: avoid; page-break-inside: avoid; }
+  .print-waypoint-table th:nth-child(1) { width: 16%; }
+  .print-waypoint-table th:nth-child(2) { width: 13%; }
+  .print-waypoint-table th:nth-child(3) { width: 8%; }
+  .print-waypoint-table th:nth-child(4) { width: 15%; }
+  .print-waypoint-table th:nth-child(5) { width: 11%; }
+  .print-waypoint-table th:nth-child(6) { width: 12%; }
+  .print-waypoint-table th:nth-child(7) { width: 10%; }
+  .print-waypoint-table th:nth-child(8) { width: 10%; }
+  .print-waypoint-table th:nth-child(9) { width: 5%; }
+  .print-waypoint-table td:first-child strong { display: block; color: #253650; }
+  .print-table-secondary { display: block; margin-top: .7mm; color: #748197; font-size: 6pt; font-variant-numeric: tabular-nums; }
+  .print-waypoint-drop td { background: #fff8eb; }
+  .print-drop-badge { display: inline-block; margin-top: .8mm; padding: .5mm 1.2mm; color: #815214; background: #ffedca; border: 1px solid #ecd19b; border-radius: 1mm; font-size: 5.5pt; font-weight: 800; letter-spacing: .3px; }
+  .print-report-footnote { margin-top: 2mm; color: #77849a; font-size: 6.5pt; }
+  .print-only { display: inline !important; }
+  :root[data-theme="dark"] body,
+  :root[data-theme="dark"] .app-shell,
+  :root[data-theme="dark"] .workspace-area,
+  :root[data-theme="dark"] .energy-dashboard { color: #17233b !important; background: #fff !important; }
+}
