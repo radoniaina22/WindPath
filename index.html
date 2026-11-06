@@ -270,8 +270,8 @@
               <div class="energy-chart-scroll"><svg id="cumulativeChart" class="energy-chart" role="img" aria-label="Estimated and real cumulative battery use by waypoint"></svg></div>
             </section>
             <section class="energy-chart-card">
-              <div class="energy-chart-heading voltage-chart-heading"><strong>Estimated battery voltage</strong><span>capacity + load</span></div>
-              <div class="energy-chart-scroll"><svg id="voltageChart" class="energy-chart voltage-chart" role="img" aria-label="Estimated battery voltage at each waypoint"></svg></div>
+              <div class="energy-chart-heading voltage-chart-heading"><strong>Battery voltage</strong><span>estimate vs real</span></div>
+              <div class="energy-chart-scroll"><svg id="voltageChart" class="energy-chart voltage-chart" role="img" aria-label="Estimated and real battery voltage at each waypoint"></svg></div>
             </section>
           </div>
           <p class="energy-method">Each waypoint voltage uses the full reference discharge curve plus an estimated load-sag correction relative to the reference flight's 14.44 A average. Pack resistance is fitted at 34.06 mΩ from the new battery logs; cell temperature, battery age, and transient sag can change actual voltage.</p>
@@ -295,12 +295,12 @@
                 <th scope="col">Phase / payload</th>
                 <th scope="col">Estimated mAh<br>leg / cumulative</th>
                 <th scope="col">Recorded mAh<br>leg / cumulative</th>
-                <th scope="col">Est. voltage</th>
+                <th scope="col">Est. / real voltage</th>
               </tr>
             </thead>
             <tbody id="printWaypointRows"></tbody>
           </table>
-          <footer class="print-report-footnote">ETAs, wind, battery use, and voltage are estimates. Recorded mAh and pass times are only shown where entered. Real leg mAh is derived from consecutive cumulative readings.</footer>
+          <footer class="print-report-footnote">ETAs, wind, battery use, and estimated voltage are estimates. Real mAh, voltage, and pass times are only shown where entered. Real leg mAh is derived from consecutive cumulative readings.</footer>
         </section>
         <section class="waypoint-table-panel" aria-labelledby="waypointTableTitle">
           <div class="panel-resize panel-resize--horizontal" id="tableResize" role="separator" aria-label="Resize waypoint table height" aria-orientation="horizontal" tabindex="0" title="Drag or use arrow keys to resize; Home resets"></div>
@@ -332,7 +332,7 @@
                   <th scope="col">Est. leg mAh</th>
                   <th scope="col">Est. cumul. mAh</th>
                   <th scope="col" title="Derived real leg mAh and estimate variance = estimated leg mAh minus real leg mAh">Real leg / variance</th>
-                  <th scope="col" title="Enter the battery counter's cumulative used mAh; comparison below is estimated cumulative mAh minus real cumulative mAh">Real cumul. mAh (input)</th>
+                  <th scope="col" title="Enter real cumulative used mAh and real battery voltage. mAh difference = estimate minus real; voltage difference = real minus estimate. Red indicates an optimistic estimate.">Real cumul. mAh / voltage</th>
                   <th scope="col" title="Mark the real pass time and compare it with the ETA">Pass time / Δ ETA</th>
                   <th scope="col">Actions</th>
                 </tr>

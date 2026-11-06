@@ -1054,7 +1054,6 @@ function drawEnergyCharts() {
   drawCumulativeChart();
   if (!points.length) {
     elements.consumptionChart.classList.add("empty");
-    elements.voltageChart.classList.add("empty");
     elements.consumptionChart.parentElement.classList.add("empty");
     elements.voltageChart.parentElement.classList.add("empty");
     const emptyWidth = Math.max(260, Math.floor(elements.consumptionChart.parentElement.getBoundingClientRect().width));
@@ -1064,6 +1063,7 @@ function drawEnergyCharts() {
     elements.voltageChart.setAttribute("width", String(emptyWidth));
     elements.consumptionChart.innerHTML = `<text class="chart-empty" x="${emptyWidth / 2}" y="42" text-anchor="middle">Check winds to estimate battery use</text>`;
     elements.voltageChart.innerHTML = `<text class="chart-empty" x="${emptyWidth / 2}" y="42" text-anchor="middle">Voltage estimate appears after wind analysis</text>`;
+    drawVoltageChart();
     return;
   }
 
@@ -1110,51 +1110,87 @@ function drawEnergyCharts() {
   elements.consumptionChart.setAttribute("width", String(width));
   elements.consumptionChart.innerHTML = consumptionParts.join("");
 
-  const validVoltagePoints = points
+  drawVoltageChart();
+}
+
+function drawVoltageChart() {
+  const chart = elements.voltageChart;
+  const voltagePoints = state.waypoints
     .map((waypoint, index) => ({ waypoint, index }))
-    .filter(({ waypoint }) => Number.isFinite(waypoint.estimatedVoltage));
-  if (!validVoltagePoints.length) {
-    elements.voltageChart.classList.add("empty");
-    elements.voltageChart.parentElement.classList.add("empty");
-    elements.voltageChart.setAttribute("viewBox", `0 0 ${width} 76`);
-    elements.voltageChart.setAttribute("width", String(width));
-    elements.voltageChart.innerHTML = `<text class="chart-empty" x="${width / 2}" y="42" text-anchor="middle">Enter a valid departure voltage</text>`;
+    .filter(({ waypoint }) => Number.isFinite(waypoint.estimatedVoltage) || Number.isFinite(waypoint.actualVoltage));
+  const width = Math.max(260, Math.floor(chart.parentElement.getBoundingClientRect().width));
+  chart.setAttribute("width", String(width));
+  if (!voltagePoints.length) {
+    chart.classList.add("empty");
+    chart.parentElement.classList.add("empty");
+    chart.setAttribute("viewBox", `0 0 ${width} 76`);
+    chart.innerHTML = `<text class="chart-empty" x="${width / 2}" y="42" text-anchor="middle">Check winds for estimates or enter real voltage readings</text>`;
     return;
   }
 
-  const voltageValues = validVoltagePoints.map(({ waypoint }) => waypoint.estimatedVoltage);
+  chart.classList.remove("empty");
+  chart.parentElement.classList.remove("empty");
+  const plotLeft = 42;
+  const plotRight = width - 18;
+  const plotTop = 34;
+  const plotBottom = 142;
+  const plotHeight = plotBottom - plotTop;
+  const groupWidth = (plotRight - plotLeft) / Math.max(1, state.waypoints.length);
+  const voltageValues = voltagePoints.flatMap(({ waypoint }) => [
+    Number.isFinite(waypoint.estimatedVoltage) ? waypoint.estimatedVoltage : null,
+    Number.isFinite(waypoint.actualVoltage) ? waypoint.actualVoltage : null
+  ].filter(Number.isFinite));
   const minimumVoltage = Math.min(...voltageValues);
   const maximumVoltage = Math.max(...voltageValues);
-  const voltageTickStep = Math.max(1, Math.ceil((maximumVoltage - minimumVoltage) / 4));
-  const voltageBottom = Math.floor((minimumVoltage - voltageTickStep * 0.25) / voltageTickStep) * voltageTickStep;
-  const voltageTop = Math.ceil((maximumVoltage + voltageTickStep * 0.25) / voltageTickStep) * voltageTickStep;
+  const tickStep = Math.max(1, Math.ceil((maximumVoltage - minimumVoltage) / 4));
+  const voltageBottom = Math.floor((minimumVoltage - tickStep * 0.25) / tickStep) * tickStep;
+  const voltageTop = Math.ceil((maximumVoltage + tickStep * 0.25) / tickStep) * tickStep;
   const voltageY = voltage => plotBottom - (voltage - voltageBottom) / (voltageTop - voltageBottom) * plotHeight;
-  const voltageParts = [];
-  for (let tick = voltageBottom; tick <= voltageTop; tick += voltageTickStep) {
+  const parts = [
+    `<text class="chart-legend estimate-legend" x="${plotLeft}" y="15">Estimated</text>`,
+    `<text class="chart-legend actual-legend" x="${plotLeft + 86}" y="15">Real voltage</text>`
+  ];
+  for (let tick = voltageBottom; tick <= voltageTop; tick += tickStep) {
     const y = voltageY(tick);
-    voltageParts.push(`<line class="chart-grid" x1="${plotLeft}" y1="${y}" x2="${plotRight}" y2="${y}"></line>`);
-    voltageParts.push(`<text class="chart-axis" x="${plotLeft - 6}" y="${y + 3}" text-anchor="end">${tick.toFixed(0)} V</text>`);
+    parts.push(`<line class="chart-grid" x1="${plotLeft}" y1="${y}" x2="${plotRight}" y2="${y}"></line>`);
+    parts.push(`<text class="chart-axis" x="${plotLeft - 6}" y="${y + 3}" text-anchor="end">${tick.toFixed(0)} V</text>`);
   }
-  const linePoints = validVoltagePoints.map(({ waypoint, index }) => ({
+
+  const estimatedPoints = voltagePoints.filter(({ waypoint }) => Number.isFinite(waypoint.estimatedVoltage)).map(({ waypoint, index }) => ({
     waypoint,
     index,
     x: plotLeft + groupWidth * (index + 0.5),
     y: voltageY(waypoint.estimatedVoltage)
   }));
-  voltageParts.push(`<polyline class="chart-voltage-line" points="${linePoints.map(point => `${point.x},${point.y}`).join(" ")}"></polyline>`);
-  linePoints.forEach((point, index) => {
-    const waypoint = point.waypoint;
-    const loadAdjustment = Number.isFinite(waypoint.estimatedVoltageLoadAdjustmentV)
-      ? `; load adjustment ${waypoint.estimatedVoltageLoadAdjustmentV.toFixed(2)} V`
+  const actualPoints = voltagePoints.filter(({ waypoint }) => Number.isFinite(waypoint.actualVoltage)).map(({ waypoint, index }) => ({
+    waypoint,
+    index,
+    x: plotLeft + groupWidth * (index + 0.5),
+    y: voltageY(waypoint.actualVoltage)
+  }));
+  if (estimatedPoints.length > 1) {
+    parts.push(`<polyline class="chart-voltage-estimate-line" points="${estimatedPoints.map(point => `${point.x},${point.y}`).join(" ")}"></polyline>`);
+  }
+  if (actualPoints.length > 1) {
+    parts.push(`<polyline class="chart-voltage-actual-line" points="${actualPoints.map(point => `${point.x},${point.y}`).join(" ")}"></polyline>`);
+  }
+  estimatedPoints.forEach(point => {
+    const loadAdjustment = Number.isFinite(point.waypoint.estimatedVoltageLoadAdjustmentV)
+      ? `; load adjustment ${point.waypoint.estimatedVoltageLoadAdjustmentV.toFixed(2)} V`
       : "";
-    voltageParts.push(`<circle class="chart-voltage-point" cx="${point.x}" cy="${point.y}" r="3"><title>Waypoint ${point.index + 1}: ${waypoint.estimatedVoltage.toFixed(1)} V${loadAdjustment}</title></circle>`);
-    if (point.index % Math.ceil(points.length / 10) === 0 || point.index === points.length - 1) {
-      voltageParts.push(`<text class="chart-axis" x="${point.x}" y="${plotBottom + 16}" text-anchor="middle">WP ${waypointNumber(waypoint, state.waypoints.indexOf(waypoint))}</text>`);
+    parts.push(`<circle class="chart-voltage-estimate-point" cx="${point.x}" cy="${point.y}" r="3"><title>Waypoint ${waypointNumber(point.waypoint, point.index)}: estimated ${point.waypoint.estimatedVoltage.toFixed(1)} V${loadAdjustment}</title></circle>`);
+  });
+  actualPoints.forEach(point => {
+    parts.push(`<circle class="chart-voltage-actual-point" cx="${point.x}" cy="${point.y}" r="3"><title>Waypoint ${waypointNumber(point.waypoint, point.index)}: real ${point.waypoint.actualVoltage.toFixed(2)} V</title></circle>`);
+  });
+  voltagePoints.forEach(({ waypoint, index }) => {
+    if (index % Math.ceil(state.waypoints.length / 10) === 0 || index === state.waypoints.length - 1) {
+      const x = plotLeft + groupWidth * (index + 0.5);
+      parts.push(`<text class="chart-axis" x="${x}" y="${plotBottom + 16}" text-anchor="middle">WP ${waypointNumber(waypoint, index)}</text>`);
     }
   });
-  elements.voltageChart.setAttribute("viewBox", `0 0 ${width} 170`);
-  elements.voltageChart.setAttribute("width", String(width));
-  elements.voltageChart.innerHTML = voltageParts.join("");
+  chart.setAttribute("viewBox", `0 0 ${width} 170`);
+  chart.innerHTML = parts.join("");
 }
 
 function drawCumulativeChart() {
@@ -1401,7 +1437,7 @@ function makeWaypoint({ lat, lon, altitude = 100, frame = 3, sequence, command =
     estimatedVoltageLoadAdjustmentV: null,
     legPayloadKg: null, verticalSpeedMps: null, verticalCurrentAdjustmentA: null,
     actualPassedAt: null,
-    actualUsedMah: null, actualCumulativeMah: null, cumulativeActualMah: null
+    actualUsedMah: null, actualCumulativeMah: null, cumulativeActualMah: null, actualVoltage: null
   };
 }
 
@@ -1956,6 +1992,35 @@ function cumulativeVarianceMarkup(waypoint) {
   return `<span class="consumption-variance ${state}" data-cell="cumulative-variance"><strong>${difference > 0 ? "+" : ""}${Math.round(difference).toLocaleString()} mAh</strong>${percentMarkup}</span>`;
 }
 
+function voltageVarianceDetails(waypoint) {
+  if (!Number.isFinite(waypoint.actualVoltage) || !Number.isFinite(waypoint.estimatedVoltage)) return null;
+  const difference = waypoint.actualVoltage - waypoint.estimatedVoltage;
+  return {
+    difference,
+    percent: waypoint.estimatedVoltage !== 0 ? difference / waypoint.estimatedVoltage * 100 : null
+  };
+}
+
+function voltageVarianceMarkup(waypoint) {
+  const variance = voltageVarianceDetails(waypoint);
+  if (!variance) return "<span data-cell=\"voltage-variance\">—</span>";
+  const state = variance.difference < 0 ? "negative" : variance.difference > 0 ? "positive" : "neutral";
+  const percentMarkup = Number.isFinite(variance.percent)
+    ? `<span class="consumption-percent">${variance.percent > 0 ? "+" : ""}${variance.percent.toFixed(1)}%</span>`
+    : "";
+  return `<span class="consumption-variance voltage-variance ${state}" data-cell="voltage-variance" title="Real voltage minus estimated voltage"><strong>${variance.difference > 0 ? "+" : ""}${variance.difference.toFixed(1)} V</strong>${percentMarkup}</span>`;
+}
+
+function actualReadingsPrintText(waypoint) {
+  const actualCumulative = Number.isFinite(waypoint.actualCumulativeMah)
+    ? `${Math.round(waypoint.actualCumulativeMah).toLocaleString()} mAh`
+    : "— mAh";
+  const actualVoltage = Number.isFinite(waypoint.actualVoltage)
+    ? `${waypoint.actualVoltage.toFixed(2)} V`
+    : "— V";
+  return `${actualCumulative} · ${actualVoltage}`;
+}
+
 function renderWaypoints() {
   updateMissionSummary();
   updateEnergySummary();
@@ -1985,6 +2050,7 @@ function renderWaypoints() {
     const actualPassTime = Number.isFinite(waypoint.actualPassedAt) ? formatPassTime(waypoint.actualPassedAt) : "Not passed";
     const passButtonLabel = Number.isFinite(waypoint.actualPassedAt) ? "Clear" : "Mark passed";
     const realCumulativeValue = Number.isFinite(waypoint.actualCumulativeMah) ? escapeHtml(waypoint.actualCumulativeMah) : "";
+    const actualVoltageValue = Number.isFinite(waypoint.actualVoltage) ? escapeHtml(waypoint.actualVoltage) : "";
     const realUsed = Number.isFinite(waypoint.actualUsedMah) ? Math.round(waypoint.actualUsedMah).toLocaleString() : "—";
     const realCumulative = Number.isFinite(waypoint.actualCumulativeMah) ? Math.round(waypoint.actualCumulativeMah).toLocaleString() : "—";
     const dropPoint = hasDropPoint(waypoint);
@@ -2002,7 +2068,15 @@ function renderWaypoints() {
       <td class="numeric-cell">${estimatedUsed}</td>
       <td class="numeric-cell">${estimatedCumulative}</td>
       <td class="numeric-cell leg-consumption-cell"><span class="real-leg-value" data-cell="actual-used">${realUsed}</span>${legVarianceMarkup(waypoint)}</td>
-      <td class="cumulative-consumption-cell"><input class="table-real-input" type="number" min="0" step="10" value="${realCumulativeValue}" data-action="actual-cumulative" aria-label="Cumulative battery use at waypoint ${waypointNumber(waypoint, index)} in milliamp hours"><span class="print-only">${Number.isFinite(waypoint.actualCumulativeMah) ? `${Math.round(waypoint.actualCumulativeMah).toLocaleString()} mAh` : "—"}</span>${cumulativeVarianceMarkup(waypoint)}</td>
+      <td class="cumulative-consumption-cell">
+        <div class="real-battery-readings">
+          <label class="real-battery-reading"><span>mAh</span><input class="table-real-input" type="number" min="0" step="10" value="${realCumulativeValue}" data-action="actual-cumulative" aria-label="Cumulative battery use at waypoint ${waypointNumber(waypoint, index)} in milliamp hours"></label>
+          <label class="real-battery-reading"><span>V</span><input class="table-real-input real-voltage-input" type="number" min="30" max="51" step="0.01" value="${actualVoltageValue}" data-action="actual-voltage" aria-label="Real battery voltage at waypoint ${waypointNumber(waypoint, index)} in volts"></label>
+        </div>
+        <span class="print-only" data-cell="actual-readings-print">${actualReadingsPrintText(waypoint)}</span>
+        ${cumulativeVarianceMarkup(waypoint)}
+        ${voltageVarianceMarkup(waypoint)}
+      </td>
       <td class="pass-cell"><button class="pass-button${Number.isFinite(waypoint.actualPassedAt) ? " recorded" : ""}" type="button" data-action="toggle-pass" aria-label="${passButtonLabel} pass time for ${escapeHtml(waypoint.name || `Waypoint ${index + 1}`)}" title="${Number.isFinite(waypoint.actualPassedAt) ? "Clear recorded pass time" : "Record the actual pass time now"}">${passButtonLabel}</button><span class="pass-time">${actualPassTime}</span><span class="pass-delta ${passDifference.status}">${passDifference.label}</span></td>
       <td><button class="table-remove-button" type="button" data-action="remove" aria-label="Remove waypoint ${waypointNumber(waypoint, index)}">×</button></td>
     </tr>`;
@@ -2142,6 +2216,7 @@ function renderPrintReport() {
     const actualLeg = Number.isFinite(waypoint.actualUsedMah) ? Math.round(waypoint.actualUsedMah).toLocaleString() : "—";
     const actualCumulative = Number.isFinite(waypoint.actualCumulativeMah) ? Math.round(waypoint.actualCumulativeMah).toLocaleString() : "—";
     const voltage = Number.isFinite(waypoint.estimatedVoltage) ? `${waypoint.estimatedVoltage.toFixed(1)} V` : "—";
+    const actualVoltage = Number.isFinite(waypoint.actualVoltage) ? `${waypoint.actualVoltage.toFixed(2)} V` : "—";
     return `<tr${isDrop ? ' class="print-waypoint-drop"' : ""}>
       <td><strong>${waypointNumber(waypoint, index)} · ${escapeHtml(name)}</strong>${isDrop ? '<span class="print-drop-badge">DROP POINT</span>' : ""}</td>
       <td>${waypoint.lat.toFixed(5)}<span class="print-table-secondary">${waypoint.lon.toFixed(5)}</span></td>
@@ -2151,7 +2226,7 @@ function renderPrintReport() {
       <td>${escapeHtml(phases)}<span class="print-table-secondary">${escapeHtml(payload)}</span></td>
       <td>${estimatedLeg}<span class="print-table-secondary">Σ ${estimatedCumulative} mAh</span></td>
       <td>${actualLeg}<span class="print-table-secondary">Σ ${actualCumulative} mAh</span></td>
-      <td>${voltage}</td>
+      <td>EST ${voltage}<span class="print-table-secondary">REAL ${actualVoltage}</span></td>
     </tr>`;
   }).join("");
 }
@@ -2257,7 +2332,7 @@ function zoomToMission({ print = false } = {}) {
 
 function exportCsv() {
   const rows = [
-    ["Takeoff time", "Payload (kg)", "Battery capacity (mAh)", "Departure voltage (V)", "Waypoint", "Command ID", "Mission Planner command", "Speed command", "Speed changed at waypoint", "Latitude", "Longitude", "Mission altitude (m)", "Altitude above ground (m)", "Ground elevation (m)", "Wind speed (m/s)", "Wind gust at 10 m (m/s)", "Wind direction (degrees from north)", "Wind direction", "Ground speed (m/s)", "Airspeed (m/s)", "Estimated arrival", "Forecast time UTC", "Payload on leg (kg)", "Estimated vertical rate (m/s)", "Vertical current adjustment (A)", "Estimated current (A)", "Estimated leg used (mAh)", "Cumulative estimated used (mAh)", "Real leg used (mAh)", "Cumulative real used (mAh)", "Estimated voltage (V)", "Voltage load adjustment (V)", "Actual pass time", "Pass time versus ETA"],
+    ["Takeoff time", "Payload (kg)", "Battery capacity (mAh)", "Departure voltage (V)", "Waypoint", "Command ID", "Mission Planner command", "Speed command", "Speed changed at waypoint", "Latitude", "Longitude", "Mission altitude (m)", "Altitude above ground (m)", "Ground elevation (m)", "Wind speed (m/s)", "Wind gust at 10 m (m/s)", "Wind direction (degrees from north)", "Wind direction", "Ground speed (m/s)", "Airspeed (m/s)", "Estimated arrival", "Forecast time UTC", "Payload on leg (kg)", "Estimated vertical rate (m/s)", "Vertical current adjustment (A)", "Estimated current (A)", "Estimated leg used (mAh)", "Cumulative estimated used (mAh)", "Real leg used (mAh)", "Cumulative real used (mAh)", "Estimated voltage (V)", "Real voltage (V)", "Real-estimate voltage difference (V)", "Real-estimate voltage difference (%)", "Voltage load adjustment (V)", "Actual pass time", "Pass time versus ETA"],
     ...state.waypoints.map((point, index) => [
       elements.takeoffTime.value ? `${new Date(elements.takeoffTime.value).toISOString().replace("T", " ").slice(0, 16)} UTC` : "",
       elements.payloadWeight.value,
@@ -2292,6 +2367,9 @@ function exportCsv() {
       Number.isFinite(point.actualUsedMah) ? Math.round(point.actualUsedMah) : "",
       Number.isFinite(point.actualCumulativeMah) ? Math.round(point.actualCumulativeMah) : "",
       Number.isFinite(point.estimatedVoltage) ? point.estimatedVoltage.toFixed(2) : "",
+      Number.isFinite(point.actualVoltage) ? point.actualVoltage.toFixed(2) : "",
+      Number.isFinite(voltageVarianceDetails(point)?.difference) ? voltageVarianceDetails(point).difference.toFixed(2) : "",
+      Number.isFinite(voltageVarianceDetails(point)?.percent) ? voltageVarianceDetails(point).percent.toFixed(2) : "",
       Number.isFinite(point.estimatedVoltageLoadAdjustmentV) ? point.estimatedVoltageLoadAdjustmentV.toFixed(2) : "",
       Number.isFinite(point.actualPassedAt) ? `${new Date(point.actualPassedAt).toISOString().replace("T", " ").slice(0, 19)} UTC` : "",
       passTimeDifference(point).label
@@ -2444,6 +2522,28 @@ elements.waypointList.addEventListener("click", event => {
   if (event.target.closest("[data-action='select']")) selectWaypoint(row.dataset.id);
 });
 elements.waypointList.addEventListener("change", event => {
+  if (event.target.dataset.action === "actual-voltage") {
+    const row = event.target.closest(".mission-row");
+    const waypoint = state.waypoints.find(point => point.id === row?.dataset.id);
+    if (!waypoint) return;
+    if (event.target.value === "") {
+      waypoint.actualVoltage = null;
+      setMessage("");
+    } else {
+      const actualVoltage = Number(event.target.value);
+      if (!Number.isFinite(actualVoltage) || actualVoltage < 30 || actualVoltage > 51) {
+        setMessage("Enter a real 12S battery voltage between 30 and 51 V.", true);
+        renderWaypoints();
+        return;
+      }
+      waypoint.actualVoltage = actualVoltage;
+      setMessage("");
+    }
+    row.querySelector("[data-cell='voltage-variance']").outerHTML = voltageVarianceMarkup(waypoint);
+    row.querySelector("[data-cell='actual-readings-print']").textContent = actualReadingsPrintText(waypoint);
+    drawEnergyCharts();
+    return;
+  }
   if (event.target.dataset.action === "actual-cumulative") {
     const waypoint = state.waypoints.find(point => point.id === event.target.closest(".mission-row").dataset.id);
     if (!waypoint) return;
@@ -2484,6 +2584,7 @@ elements.waypointList.addEventListener("change", event => {
       row.querySelector("[data-cell='leg-variance']").outerHTML = legVarianceMarkup(point);
       row.querySelector("[data-cell='cumulative-variance']").outerHTML = cumulativeVarianceMarkup(point);
       row.querySelector("[data-action='actual-cumulative']").value = Number.isFinite(point.actualCumulativeMah) ? point.actualCumulativeMah : "";
+      row.querySelector("[data-cell='actual-readings-print']").textContent = actualReadingsPrintText(point);
     });
     drawEnergyCharts();
     return;

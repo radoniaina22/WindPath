@@ -158,8 +158,12 @@ button { color: inherit; }
 .chart-cumulative-actual { stroke: #8594a5; }
 .chart-cumulative-estimate-point { fill: #238d74; }
 .chart-cumulative-actual-point { fill: #8594a5; stroke: #fff; stroke-width: 1.5; }
-.chart-voltage-line { fill: none; stroke: #df9c38; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-.chart-voltage-point { fill: #df9c38; stroke: #fff; stroke-width: 1.5; }
+.chart-voltage-estimate-line,
+.chart-voltage-actual-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart-voltage-estimate-line { stroke: #df9c38; }
+.chart-voltage-actual-line { stroke: #6881a2; stroke-dasharray: 4 3; }
+.chart-voltage-estimate-point { fill: #df9c38; stroke: #fff; stroke-width: 1.5; }
+.chart-voltage-actual-point { fill: #6881a2; stroke: #fff; stroke-width: 1.5; }
 .chart-empty { fill: #9ba5b2; font: 9px "DM Sans", sans-serif; }
 .energy-method { margin: 8px 0 0; color: #929eaa; font-size: 8px; line-height: 1.5; }
 .summary-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1px; }
@@ -360,7 +364,13 @@ body.panel-resizing[data-resize-axis="row"], body.panel-resizing[data-resize-axi
 .numeric-cell { font-variant-numeric: tabular-nums; text-align: right; }
 .leg-consumption-cell > .real-leg-value { display: block; }
 .leg-consumption-cell > .consumption-variance { margin-top: 4px; }
+.cumulative-consumption-cell { min-width: 150px; text-align: right; }
+.real-battery-readings { display: grid; gap: 4px; justify-items: end; }
+.real-battery-reading { display: flex; align-items: center; gap: 6px; color: #8290a1; font-size: 9px; }
+.real-battery-reading > span { width: 28px; text-align: left; }
+.real-voltage-input { width: 82px; }
 .cumulative-consumption-cell > .consumption-variance { display: flex; margin-top: 4px; justify-content: flex-end; }
+.cumulative-consumption-cell > .voltage-variance { margin-top: 3px; }
 .real-leg-value { color: #34445a; font-weight: 700; }
 .estimate-mark { display: inline-flex; min-width: 66px; justify-content: center; padding: 4px 7px; color: hsl(var(--mark-hue) 54% 29%); background: hsl(var(--mark-hue) 76% 91%); border: 1px solid hsl(var(--mark-hue) 53% 78%); border-radius: 4px; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .consumption-variance { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
@@ -553,7 +563,7 @@ body.panel-resizing[data-resize-axis="row"], body.panel-resizing[data-resize-axi
   .waypoint-table th:last-child, .waypoint-table td:last-child,
   .waypoint-report-actions, .panel-resize, .map-topbar, .map-hint, .map-coordinates, .map-footer,
   .mission-alert, .loading-overlay, .leaflet-control-zoom, .pass-button, .table-remove-button,
-  .table-altitude-input, .table-real-input { display: none !important; }
+  .table-altitude-input, .table-real-input, .real-battery-readings { display: none !important; }
   .print-only { display: inline !important; }
   .table-waypoint-name { color: #17233b; font-size: 6pt; cursor: default; }
   .table-coordinates, .pass-time, .pass-delta { font-size: 5.5pt; }
@@ -765,7 +775,8 @@ body.panel-resizing[data-resize-axis="row"], body.panel-resizing[data-resize-axi
 :root[data-theme="dark"] .chart-grid { stroke: #344356; }
 :root[data-theme="dark"] .chart-axis,
 :root[data-theme="dark"] .chart-empty { fill: #a4b2c4; }
-:root[data-theme="dark"] .chart-voltage-point { stroke: #1c2837; }
+:root[data-theme="dark"] .chart-voltage-estimate-point,
+:root[data-theme="dark"] .chart-voltage-actual-point { stroke: #1c2837; }
 :root[data-theme="dark"] .waypoint-card.selected { border-color: #4aa98e; box-shadow: 0 0 0 2px rgb(46 164 129 / 18%); }
 :root[data-theme="dark"] .workspace-area,
 :root[data-theme="dark"] .map-stage,
@@ -910,15 +921,15 @@ body.panel-resizing[data-resize-axis="row"], body.panel-resizing[data-resize-axi
   .print-waypoint-table td { padding: 1.6mm 1.3mm; border: 1px solid #e4e9ed; line-height: 1.25; vertical-align: top; overflow-wrap: anywhere; }
   .print-waypoint-table thead { display: table-header-group; }
   .print-waypoint-table tr { break-inside: avoid; page-break-inside: avoid; }
-  .print-waypoint-table th:nth-child(1) { width: 16%; }
-  .print-waypoint-table th:nth-child(2) { width: 13%; }
+  .print-waypoint-table th:nth-child(1) { width: 15%; }
+  .print-waypoint-table th:nth-child(2) { width: 12%; }
   .print-waypoint-table th:nth-child(3) { width: 8%; }
-  .print-waypoint-table th:nth-child(4) { width: 15%; }
+  .print-waypoint-table th:nth-child(4) { width: 14%; }
   .print-waypoint-table th:nth-child(5) { width: 11%; }
-  .print-waypoint-table th:nth-child(6) { width: 12%; }
-  .print-waypoint-table th:nth-child(7) { width: 10%; }
+  .print-waypoint-table th:nth-child(6) { width: 11%; }
+  .print-waypoint-table th:nth-child(7) { width: 9%; }
   .print-waypoint-table th:nth-child(8) { width: 10%; }
-  .print-waypoint-table th:nth-child(9) { width: 5%; }
+  .print-waypoint-table th:nth-child(9) { width: 10%; }
   .print-waypoint-table td:first-child strong { display: block; color: #253650; }
   .print-table-secondary { display: block; margin-top: .7mm; color: #748197; font-size: 6pt; font-variant-numeric: tabular-nums; }
   .print-waypoint-drop td { background: #fff8eb; }
