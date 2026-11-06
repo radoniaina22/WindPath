@@ -9,7 +9,10 @@ const PRESSURE_LEVELS = [
   ["850", 1457], ["800", 1949], ["700", 3012], ["600", 4206], ["500", 5574]
 ];
 const HOURLY_FIELDS = [
-  "surface_pressure", "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m", "wind_speed_80m", "wind_direction_80m",
+  "temperature_2m", "relative_humidity_2m", "dew_point_2m", "apparent_temperature",
+  "precipitation_probability", "precipitation", "rain", "showers", "snowfall", "weather_code",
+  "cloud_cover", "visibility", "pressure_msl", "surface_pressure",
+  "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m", "wind_speed_80m", "wind_direction_80m",
   "wind_speed_120m", "wind_direction_120m", "wind_speed_180m", "wind_direction_180m",
   ...PRESSURE_LEVELS.flatMap(([pressure]) => [`wind_speed_${pressure}hPa`, `wind_direction_${pressure}hPa`])
 ];
@@ -97,6 +100,12 @@ const elements = {
   waypointTablePanel: document.querySelector(".waypoint-table-panel"),
   tableResize: document.getElementById("tableResize"),
   analyzeButton: document.getElementById("analyzeButton"),
+  weatherForecastButton: document.getElementById("weatherForecastButton"),
+  weatherForecastDialog: document.getElementById("weatherForecastDialog"),
+  weatherForecastCards: document.getElementById("weatherForecastCards"),
+  elevationProfileButton: document.getElementById("elevationProfileButton"),
+  elevationProfileDialog: document.getElementById("elevationProfileDialog"),
+  elevationProfileContent: document.getElementById("elevationProfileContent"),
   windCheckElapsed: document.getElementById("windCheckElapsed"),
   clearMission: document.getElementById("clearMission"),
   emptyState: document.getElementById("emptyState"),
@@ -551,6 +560,296 @@ function formatArrivalTime(timestamp) {
   return new Date(timestamp).toLocaleString([], {
     month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
   });
+}
+
+function describeWeatherCode(code) {
+  const descriptions = {
+    0: "Clear sky",
+    1: "Mainly clear",
+    2: "Partly cloudy",
+    3: "Overcast",
+    45: "Fog",
+    48: "Rime fog",
+    51: "Light drizzle",
+    53: "Moderate drizzle",
+    55: "Dense drizzle",
+    56: "Light freezing drizzle",
+    57: "Dense freezing drizzle",
+    61: "Slight rain",
+    63: "Moderate rain",
+    65: "Heavy rain",
+    66: "Light freezing rain",
+    67: "Heavy freezing rain",
+    71: "Slight snowfall",
+    73: "Moderate snowfall",
+    75: "Heavy snowfall",
+    77: "Snow grains",
+    80: "Slight rain showers",
+    81: "Moderate rain showers",
+    82: "Violent rain showers",
+    85: "Slight snow showers",
+    86: "Heavy snow showers",
+    95: "Thunderstorm",
+    96: "Thunderstorm with slight hail",
+    99: "Thunderstorm with heavy hail"
+  };
+  return Number.isFinite(code) ? descriptions[Math.round(code)] || "Conditions unavailable" : "Conditions unavailable";
+}
+
+function formatWeatherValue(value, unit, decimals = 1) {
+  if (!Number.isFinite(value)) return "Unavailable";
+  const formatted = decimals === 0 ? Math.round(value) : value.toFixed(decimals);
+  if (unit === "%") return `${formatted}%`;
+  return unit ? `${formatted} ${unit}` : formatted;
+}
+
+function getWeatherSnapshot(waypoint, timestamp) {
+  const forecast = state.forecasts?.[state.waypoints.indexOf(waypoint)];
+  const times = forecast?.hourly?.time;
+  if (!Number.isFinite(timestamp) || !Array.isArray(times) || !times.length) return null;
+
+  const firstForecastTime = new Date(`${times[0]}Z`).getTime();
+  const lastForecastTime = new Date(`${times[times.length - 1]}Z`).getTime();
+  if (!Number.isFinite(firstForecastTime) || timestamp < firstForecastTime || timestamp > lastForecastTime) return null;
+
+  const sampleIndex = nearestForecastIndex(times, new Date(timestamp).toISOString());
+  return {
+    hourly: forecast.hourly,
+    sampleIndex,
+    forecastTime: times[sampleIndex]
+  };
+}
+
+function weatherMetricMarkup(label, value) {
+  return `<div class="weather-metric"><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`;
+}
+
+function weatherForecastCardMarkup(waypoint, label, waypointIndex, timestamp) {
+  const snapshot = getWeatherSnapshot(waypoint, timestamp);
+  const hourly = snapshot?.hourly;
+  const sampleIndex = snapshot?.sampleIndex;
+  const read = field => hourly?.[field]?.[sampleIndex];
+  const weatherCode = read("weather_code");
+  const wind = waypoint.wind;
+  const windText = wind && Number.isFinite(wind.speed) && Number.isFinite(wind.direction)
+    ? `${wind.speed.toFixed(1)} m/s · ${Math.round(wind.direction)}° ${describeWindDirection(wind.direction)} from · ${Math.round(wind.altitude)} m AGL`
+    : "Unavailable";
+  const metrics = [
+    ["Rain chance (preceding hour)", formatWeatherValue(read("precipitation_probability"), "%", 0)],
+    ["Total precipitation (preceding hour)", formatWeatherValue(read("precipitation"), "mm")],
+    ["Rain · showers (preceding hour)", `${formatWeatherValue(read("rain"), "mm")} · ${formatWeatherValue(read("showers"), "mm")}`],
+    ["Snowfall (preceding hour)", formatWeatherValue(read("snowfall"), "cm")],
+    ["Wind at planned altitude", windText],
+    ["Gusts at 10 m", formatWeatherValue(read("wind_gusts_10m"), "m/s")],
+    ["Air temperature · feels like", `${formatWeatherValue(read("temperature_2m"), "°C")} · ${formatWeatherValue(read("apparent_temperature"), "°C")}`],
+    ["Cloud cover", formatWeatherValue(read("cloud_cover"), "%", 0)],
+    ["Visibility", formatWeatherValue(Number.isFinite(read("visibility")) ? read("visibility") / 1000 : null, "km")],
+    ["Humidity · dew point", `${formatWeatherValue(read("relative_humidity_2m"), "%", 0)} · ${formatWeatherValue(read("dew_point_2m"), "°C")}`],
+    ["Sea-level pressure", formatWeatherValue(read("pressure_msl"), "hPa")],
+    ["Surface pressure", formatWeatherValue(read("surface_pressure"), "hPa")]
+  ];
+  const title = waypoint.name || `Waypoint ${waypointNumber(waypoint, waypointIndex)}`;
+  const localTime = Number.isFinite(timestamp) ? `${formatArrivalTime(timestamp)} local` : "Time not estimated";
+  const sampleTime = snapshot ? `${formatForecastTime(snapshot.forecastTime)} UTC` : "No hourly forecast for this time";
+  const condition = describeWeatherCode(weatherCode);
+
+  return `<article class="weather-point-card${Number.isFinite(weatherCode) && weatherCode >= 95 ? " weather-point-card--storm" : ""}">
+    <header class="weather-point-header">
+      <div><span class="weather-point-label">${escapeHtml(label)}</span><h3>${escapeHtml(title)}</h3><p>${escapeHtml(localTime)}</p></div>
+      <strong class="weather-condition">${escapeHtml(condition)}</strong>
+    </header>
+    <dl class="weather-metrics">${metrics.map(([metricLabel, value]) => weatherMetricMarkup(metricLabel, value)).join("")}</dl>
+    <p class="weather-sample-time">Nearest forecast sample: ${escapeHtml(sampleTime)}</p>
+  </article>`;
+}
+
+function renderWeatherForecastDialog() {
+  if (!state.waypoints.length) {
+    elements.weatherForecastCards.innerHTML = '<p class="weather-forecast-state">Add a takeoff point and destination to see the flight weather.</p>';
+    return;
+  }
+  if (!state.forecasts) {
+    elements.weatherForecastCards.innerHTML = !elements.loadingOverlay.hidden
+      ? '<p class="weather-forecast-state">Loading the hourly forecast…</p>'
+      : '<p class="weather-forecast-state">Forecast unavailable. Try “Check waypoint winds” or reopen this briefing to retry.</p>';
+    return;
+  }
+
+  const takeoffWaypoint = state.waypoints[0];
+  const takeoffTimestamp = new Date(elements.takeoffTime.value).getTime();
+  const dropPoints = state.waypoints.filter(hasDropPoint);
+  const finalWaypoint = state.waypoints[state.waypoints.length - 1];
+  const destinationPoints = dropPoints.length
+    ? dropPoints.map((waypoint, index) => ({ waypoint, label: `Drop point${dropPoints.length > 1 ? ` ${index + 1}` : ""}` }))
+    : [{ waypoint: finalWaypoint, label: "Destination" }];
+  if (dropPoints.length && !dropPoints.includes(finalWaypoint)) {
+    destinationPoints.push({ waypoint: finalWaypoint, label: "Final destination" });
+  }
+  const destinationCards = destinationPoints.map(({ waypoint, label }) => {
+    const waypointIndex = state.waypoints.indexOf(waypoint);
+    return weatherForecastCardMarkup(waypoint, label, waypointIndex, waypoint.etaTimestamp);
+  });
+  elements.weatherForecastCards.innerHTML = [
+    weatherForecastCardMarkup(takeoffWaypoint, "Takeoff", 0, takeoffTimestamp),
+    ...destinationCards
+  ].join("");
+}
+
+function openWeatherForecastDialog() {
+  renderWeatherForecastDialog();
+  if (!elements.weatherForecastDialog.open) elements.weatherForecastDialog.showModal();
+  if (!state.forecasts && elements.loadingOverlay.hidden) fetchForecastForMission();
+}
+
+function getElevationProfileSamples() {
+  const homeWaypoint = state.waypoints.find(waypoint => waypoint.sequence === 0) || state.waypoints[0];
+  const homeIndex = state.waypoints.indexOf(homeWaypoint);
+  const homeElevation = Number.isFinite(homeWaypoint?.groundElevation)
+    ? homeWaypoint.groundElevation
+    : state.forecasts?.[homeIndex]?.elevation;
+  let distanceKm = 0;
+
+  return state.waypoints.map((waypoint, index) => {
+    if (index > 0) {
+      distanceKm += distanceAndBearing(state.waypoints[index - 1], waypoint).distance / 1000;
+    }
+    const forecast = state.forecasts?.[index];
+    const groundElevation = Number.isFinite(waypoint.groundElevation)
+      ? waypoint.groundElevation
+      : forecast?.elevation;
+    const isAbsoluteAltitude = waypoint.altitudeMode === "absolute" || waypoint.frame === 0 || waypoint.frame === 5;
+    const isTerrainAltitude = waypoint.altitudeMode === "terrain" || waypoint.frame === 6 || waypoint.frame === 10;
+    let flightAltitudeMsl = null;
+    let altitudeAgl = Number.isFinite(waypoint.targetAltitudeAgl) ? waypoint.targetAltitudeAgl : null;
+
+    if (Number.isFinite(altitudeAgl) && Number.isFinite(groundElevation)) {
+      flightAltitudeMsl = altitudeAgl + groundElevation;
+    } else if (isAbsoluteAltitude) {
+      flightAltitudeMsl = waypoint.altitude;
+    } else if (isTerrainAltitude && Number.isFinite(groundElevation)) {
+      altitudeAgl = waypoint.altitude;
+      flightAltitudeMsl = groundElevation + altitudeAgl;
+    } else if (waypoint.frame === 3 && Number.isFinite(homeElevation)) {
+      flightAltitudeMsl = waypoint.altitude + homeElevation;
+    }
+
+    if (!Number.isFinite(altitudeAgl) && Number.isFinite(flightAltitudeMsl) && Number.isFinite(groundElevation)) {
+      altitudeAgl = flightAltitudeMsl - groundElevation;
+    }
+    return { waypoint, index, distanceKm, groundElevation, flightAltitudeMsl, altitudeAgl };
+  });
+}
+
+function elevationProfileChartMarkup(samples) {
+  const width = 800;
+  const height = 360;
+  const plotLeft = 72;
+  const plotRight = 24;
+  const plotTop = 24;
+  const plotBottom = 294;
+  const plotWidth = width - plotLeft - plotRight;
+  const plotHeight = plotBottom - plotTop;
+  const totalDistanceKm = samples[samples.length - 1].distanceKm;
+  const minimumElevation = Math.min(...samples.flatMap(sample => [sample.groundElevation, sample.flightAltitudeMsl]));
+  const maximumElevation = Math.max(...samples.flatMap(sample => [sample.groundElevation, sample.flightAltitudeMsl]));
+  const elevationRange = Math.max(20, maximumElevation - minimumElevation);
+  const padding = Math.max(20, elevationRange * 0.12);
+  const yMinimum = Math.floor((minimumElevation - padding) / 10) * 10;
+  const yMaximum = Math.ceil((maximumElevation + padding) / 10) * 10;
+  const xForDistance = distanceKm => totalDistanceKm > 0
+    ? plotLeft + distanceKm / totalDistanceKm * plotWidth
+    : plotLeft + plotWidth / 2;
+  const yForElevation = elevation => plotBottom - (elevation - yMinimum) / (yMaximum - yMinimum) * plotHeight;
+  const flightPoints = samples.map(sample => `${xForDistance(sample.distanceKm).toFixed(1)},${yForElevation(sample.flightAltitudeMsl).toFixed(1)}`);
+  const terrainPoints = samples.map(sample => `${xForDistance(sample.distanceKm).toFixed(1)},${yForElevation(sample.groundElevation).toFixed(1)}`);
+  const flightArea = `${plotLeft},${plotBottom} ${flightPoints.join(" ")} ${plotLeft + plotWidth},${plotBottom}`;
+  const flightAreaMarkup = totalDistanceKm > 0 ? `<polygon class="elevation-flight-area" points="${flightArea}"/>` : "";
+  const terrainDots = samples.map(sample => {
+    const label = sample.waypoint.name || `Waypoint ${waypointNumber(sample.waypoint, sample.index)}`;
+    const detail = `${label}; sampled terrain ${sample.groundElevation.toFixed(0)} m MSL`;
+    return `<circle class="elevation-terrain-dot" cx="${xForDistance(sample.distanceKm).toFixed(1)}" cy="${yForElevation(sample.groundElevation).toFixed(1)}" r="3.5"><title>${escapeHtml(detail)}</title></circle>`;
+  }).join("");
+  const yGrid = Array.from({ length: 5 }, (_, index) => {
+    const elevation = yMaximum - (yMaximum - yMinimum) * index / 4;
+    const y = yForElevation(elevation).toFixed(1);
+    return `<g><line class="elevation-grid-line" x1="${plotLeft}" y1="${y}" x2="${plotLeft + plotWidth}" y2="${y}"/><text class="elevation-axis-label" x="${plotLeft - 9}" y="${Number(y) + 3}" text-anchor="end">${Math.round(elevation)}</text></g>`;
+  }).join("");
+  const xTickPositions = totalDistanceKm > 0 ? [0, 0.25, 0.5, 0.75, 1] : [0];
+  const xTicks = xTickPositions.map(fraction => {
+    const x = xForDistance(totalDistanceKm * fraction).toFixed(1);
+    const label = totalDistanceKm > 0 ? (totalDistanceKm * fraction).toFixed(1) : "0.0";
+    return `<g><line class="elevation-grid-line elevation-grid-line--vertical" x1="${x}" y1="${plotTop}" x2="${x}" y2="${plotBottom}"/><text class="elevation-axis-label" x="${x}" y="${plotBottom + 20}" text-anchor="middle">${label}</text></g>`;
+  }).join("");
+  const labelStep = Math.max(1, Math.ceil(samples.length / 10));
+  const waypointDots = samples.map((sample, index) => {
+    const x = xForDistance(sample.distanceKm);
+    const y = yForElevation(sample.flightAltitudeMsl);
+    const label = sample.waypoint.name || `Waypoint ${waypointNumber(sample.waypoint, index)}`;
+    const detail = `${label}; ${sample.distanceKm.toFixed(1)} km; ${sample.flightAltitudeMsl.toFixed(0)} m MSL; ${sample.altitudeAgl.toFixed(0)} m AGL; terrain ${sample.groundElevation.toFixed(0)} m MSL`;
+    const showLabel = index === 0 || index === samples.length - 1 || index % labelStep === 0 || hasDropPoint(sample.waypoint);
+    const labelY = y < plotTop + 24 ? y + 20 : y - 10;
+    const dropClass = hasDropPoint(sample.waypoint) ? " elevation-waypoint-dot--drop" : "";
+    return `<circle class="elevation-waypoint-dot${dropClass}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4"><title>${escapeHtml(detail)}</title></circle>${showLabel ? `<text class="elevation-waypoint-label" x="${x.toFixed(1)}" y="${labelY.toFixed(1)}" text-anchor="middle">${waypointNumber(sample.waypoint, index)}</text>` : ""}`;
+  }).join("");
+
+  return `<svg class="elevation-chart" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="elevationChartTitle elevationChartDescription">
+    <title id="elevationChartTitle">Planned flight altitude and terrain profile</title>
+    <desc id="elevationChartDescription">Flight altitude and sampled terrain elevation across ${totalDistanceKm.toFixed(1)} kilometers of route.</desc>
+    ${yGrid}${xTicks}
+    ${flightAreaMarkup}
+    <polyline class="elevation-terrain-line" points="${terrainPoints.join(" ")}"/>
+    ${terrainDots}
+    <polyline class="elevation-flight-line" points="${flightPoints.join(" ")}"/>
+    ${waypointDots}
+    <line class="elevation-axis-line" x1="${plotLeft}" y1="${plotTop}" x2="${plotLeft}" y2="${plotBottom}"/>
+    <line class="elevation-axis-line" x1="${plotLeft}" y1="${plotBottom}" x2="${plotLeft + plotWidth}" y2="${plotBottom}"/>
+    <text class="elevation-axis-title" x="18" y="${plotTop + plotHeight / 2}" text-anchor="middle" transform="rotate(-90 18 ${plotTop + plotHeight / 2})">Elevation MSL (m)</text>
+    <text class="elevation-axis-title" x="${plotLeft + plotWidth / 2}" y="${height - 8}" text-anchor="middle">Route distance (km)</text>
+  </svg>`;
+}
+
+function renderElevationProfileDialog() {
+  if (!state.waypoints.length) {
+    elements.elevationProfileContent.innerHTML = '<p class="weather-forecast-state">Add a takeoff point and destination to see the elevation profile.</p>';
+    return;
+  }
+  if (!state.forecasts) {
+    elements.elevationProfileContent.innerHTML = !elements.loadingOverlay.hidden
+      ? '<p class="weather-forecast-state">Loading waypoint terrain elevations…</p>'
+      : '<p class="weather-forecast-state">Elevation data unavailable. Reopen this profile to try again.</p>';
+    return;
+  }
+
+  const samples = getElevationProfileSamples();
+  if (!samples.length || samples.some(sample => !Number.isFinite(sample.groundElevation) || !Number.isFinite(sample.flightAltitudeMsl) || !Number.isFinite(sample.altitudeAgl))) {
+    elements.elevationProfileContent.innerHTML = '<p class="weather-forecast-state">Could not build a complete terrain profile for this route. Check the waypoint forecast and altitude data.</p>';
+    return;
+  }
+
+  const totalDistanceKm = samples[samples.length - 1].distanceKm;
+  const aglValues = samples.map(sample => sample.altitudeAgl);
+  const highestTerrain = Math.max(...samples.map(sample => sample.groundElevation));
+  const legClimbs = samples.slice(1).map((sample, index) => sample.flightAltitudeMsl - samples[index].flightAltitudeMsl);
+  const maximumClimb = Math.max(0, ...legClimbs);
+  const maximumDescent = Math.abs(Math.min(0, ...legClimbs));
+  const altitudeUnit = aglValues.every(Number.isFinite) ? "AGL" : "MSL";
+  const altitudeValues = altitudeUnit === "AGL" ? aglValues : samples.map(sample => sample.flightAltitudeMsl);
+  const summary = [
+    ["Route distance", `${totalDistanceKm.toFixed(totalDistanceKm < 10 ? 1 : 0)} km`],
+    [`Planned altitude range (${altitudeUnit})`, `${Math.min(...altitudeValues).toFixed(0)}–${Math.max(...altitudeValues).toFixed(0)} m`],
+    ["Highest sampled terrain", `${highestTerrain.toFixed(0)} m MSL`],
+    ["Largest leg climb · descent", `+${maximumClimb.toFixed(0)} m · −${maximumDescent.toFixed(0)} m`]
+  ];
+  const summaryMarkup = summary.map(([label, value]) => `<div class="elevation-summary-card"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
+  elements.elevationProfileContent.innerHTML = `<div class="elevation-profile-summary">${summaryMarkup}</div>
+    <div class="elevation-profile-legend"><span><i class="elevation-legend-flight"></i>Planned flight altitude</span><span><i class="elevation-legend-terrain"></i>Terrain at waypoints</span><span><i class="elevation-legend-drop"></i>Drop point</span></div>
+    <div class="elevation-chart-wrap">${elevationProfileChartMarkup(samples)}</div>`;
+}
+
+function openElevationProfileDialog() {
+  renderElevationProfileDialog();
+  if (!elements.elevationProfileDialog.open) elements.elevationProfileDialog.showModal();
+  if (!state.forecasts && elements.loadingOverlay.hidden) fetchForecastForMission();
 }
 
 function updateMissionSummary() {
@@ -1586,6 +1885,7 @@ async function fetchForecastForMission() {
   if (state.forecastController) state.forecastController.abort();
   state.forecastController = new AbortController();
   const { signal } = state.forecastController;
+  state.forecasts = null;
   setMessage("");
   elements.loadingOverlay.hidden = false;
   elements.loadingText.textContent = `Fetching ${state.waypoints.length} altitude-specific forecast${state.waypoints.length === 1 ? "" : "s"}…`;
@@ -1658,6 +1958,10 @@ async function fetchForecastForMission() {
     if (requestId === state.requestId) {
       elements.loadingOverlay.hidden = true;
       elements.analyzeButton.disabled = !state.waypoints.length;
+      elements.weatherForecastButton.disabled = !state.waypoints.length;
+      elements.elevationProfileButton.disabled = !state.waypoints.length;
+      if (elements.weatherForecastDialog.open) renderWeatherForecastDialog();
+      if (elements.elevationProfileDialog.open) renderElevationProfileDialog();
     }
   }
 }
@@ -1859,9 +2163,6 @@ function updateDronePosition() {
     state.droneMarker.setLatLng([position.lat, position.lon]);
   }
   elements.followDrone.disabled = false;
-  if (state.followDrone && map.getCenter().distanceTo([position.lat, position.lon]) > 25) {
-    map.panTo([position.lat, position.lon], { animate: true, duration: 0.35 });
-  }
 
   const markerElement = state.droneMarker.getElement();
   if (markerElement) {
@@ -1891,6 +2192,17 @@ function updateDronePosition() {
   }
 }
 
+function panToFollowDrone(force = false) {
+  if (!state.followDrone) return;
+  const marker = state.referenceDroneMarker || state.droneMarker;
+  if (!marker) return;
+
+  const position = marker.getLatLng();
+  if (force || map.getCenter().distanceTo(position) > 25) {
+    map.panTo(position, { animate: true, duration: 0.35 });
+  }
+}
+
 function updateReferenceDronePosition() {
   const waypoints = state.waypoints;
   const passedWaypoints = waypoints
@@ -1905,13 +2217,16 @@ function updateReferenceDronePosition() {
       state.referenceDroneMarker.remove();
       state.referenceDroneMarker = null;
     }
+    panToFollowDrone();
     return;
   }
 
   let position = { lat: latestPassed.waypoint.lat, lon: latestPassed.waypoint.lon };
   let bearing = 0;
+  let positionedOnLeg = false;
   let sectionIndex = latestPassed.index;
   let sectionStartAt = latestPassed.waypoint.actualPassedAt;
+  let currentAltitude = latestPassed.waypoint.altitude;
   const now = Date.now();
 
   while (sectionIndex < waypoints.length - 1) {
@@ -1929,6 +2244,7 @@ function updateReferenceDronePosition() {
       bearing = leg.bearing;
       sectionIndex += 1;
       sectionStartAt += duration;
+      currentAltitude = to.altitude;
       continue;
     }
 
@@ -1937,22 +2253,30 @@ function updateReferenceDronePosition() {
       lat: from.lat + (to.lat - from.lat) * progress,
       lon: from.lon + (to.lon - from.lon) * progress
     };
+    if (Number.isFinite(from.altitude) && Number.isFinite(to.altitude)) {
+      currentAltitude = from.altitude + (to.altitude - from.altitude) * progress;
+    }
     bearing = leg.bearing;
+    positionedOnLeg = true;
     break;
   }
+
+  const currentLeg = sectionIndex < waypoints.length - 1 ? waypoints[sectionIndex + 1] : null;
+  const currentGroundSpeed = currentLeg?.groundSpeed;
+  const currentAirSpeed = currentLeg?.airSpeed;
 
   if (!state.referenceDroneMarker) {
     const icon = L.divIcon({
       className: "reference-drone-marker",
-      html: '<div class="reference-drone-symbol" title="Recorded drone position"><svg class="reference-drone-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 3 11 6 4v3l-7-2-2 4-2-4-7 2v-3l6-4 3-11Z"/></svg></div><span class="reference-drone-badge">REAL POSITION</span>',
-      iconSize: [128, 34],
+      html: '<div class="reference-drone-symbol" title="Recorded drone position"><svg class="reference-drone-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 3 11 6 4v3l-7-2-2 4-2-4-7 2v-3l6-4 3-11Z"/></svg></div><div class="reference-drone-details"><span class="reference-drone-badge">REAL POSITION</span><span class="reference-drone-speeds"></span><span class="reference-drone-position"></span></div>',
+      iconSize: [176, 54],
       iconAnchor: [15, 15]
     });
     state.referenceDroneMarker = L.marker([position.lat, position.lon], {
       icon,
       keyboard: false,
       interactive: false,
-      zIndexOffset: 900
+      zIndexOffset: 1100
     }).addTo(map);
   } else {
     state.referenceDroneMarker.setLatLng([position.lat, position.lon]);
@@ -1961,6 +2285,19 @@ function updateReferenceDronePosition() {
   const markerElement = state.referenceDroneMarker.getElement();
   const plane = markerElement?.querySelector(".reference-drone-plane");
   if (plane) plane.style.transform = `rotate(${bearing}deg)`;
+  const speedsLabel = markerElement?.querySelector(".reference-drone-speeds");
+  const positionLabel = markerElement?.querySelector(".reference-drone-position");
+  if (speedsLabel) {
+    const groundSpeedText = Number.isFinite(currentGroundSpeed) ? currentGroundSpeed.toFixed(1) : "—";
+    const airSpeedText = Number.isFinite(currentAirSpeed) ? currentAirSpeed.toFixed(1) : "—";
+    speedsLabel.textContent = `GS ${groundSpeedText} · AS ${airSpeedText} m/s`;
+  }
+  if (positionLabel) {
+    const altitudeText = Number.isFinite(currentAltitude) ? `${currentAltitude.toFixed(0)} m` : "—";
+    const headingText = positionedOnLeg ? `${Math.round((bearing + 360) % 360)}°` : "—";
+    positionLabel.textContent = `ALT ${altitudeText} · HDG ${headingText}`;
+  }
+  panToFollowDrone();
 }
 
 function escapeHtml(value) {
@@ -2032,6 +2369,8 @@ function renderWaypoints() {
   elements.printButton.disabled = state.waypoints.length === 0;
   elements.fitMissionButton.disabled = state.waypoints.length === 0;
   elements.analyzeButton.disabled = state.waypoints.length === 0 || !elements.loadingOverlay.hidden;
+  elements.weatherForecastButton.disabled = state.waypoints.length === 0 || !elements.loadingOverlay.hidden;
+  elements.elevationProfileButton.disabled = state.waypoints.length === 0 || !elements.loadingOverlay.hidden;
   elements.waypointList.innerHTML = state.waypoints.map((waypoint, index) => {
     const wind = waypoint.wind
       ? `${Math.round(waypoint.wind.direction)}° | ${waypoint.wind.speed.toFixed(1)}m/s`
@@ -2083,6 +2422,8 @@ function renderWaypoints() {
   }).join("");
   drawEnergyCharts();
   renderMap();
+  if (elements.weatherForecastDialog.open) renderWeatherForecastDialog();
+  if (elements.elevationProfileDialog.open) renderElevationProfileDialog();
 }
 
 function colorScaleHue(value, minimum, maximum) {
@@ -2446,6 +2787,14 @@ elements.analyzeButton.addEventListener("click", () => {
   prepareNotificationAudio();
   fetchForecastForMission();
 });
+elements.weatherForecastButton.addEventListener("click", openWeatherForecastDialog);
+elements.weatherForecastDialog.addEventListener("click", event => {
+  if (event.target === elements.weatherForecastDialog) elements.weatherForecastDialog.close();
+});
+elements.elevationProfileButton.addEventListener("click", openElevationProfileDialog);
+elements.elevationProfileDialog.addEventListener("click", event => {
+  if (event.target === elements.elevationProfileDialog) elements.elevationProfileDialog.close();
+});
 elements.clearMission.addEventListener("click", clearMission);
 elements.exportButton.addEventListener("click", exportCsv);
 elements.printButton.addEventListener("click", () => {
@@ -2488,9 +2837,7 @@ window.addEventListener("afterprint", () => {
 });
 elements.followDrone.addEventListener("change", () => {
   state.followDrone = elements.followDrone.checked;
-  if (state.followDrone && state.droneMarker) {
-    map.panTo(state.droneMarker.getLatLng(), { animate: true, duration: 0.35 });
-  }
+  panToFollowDrone(true);
 });
 elements.missionFile.addEventListener("change", event => loadMissionFile(event.target.files[0]));
 document.getElementById("searchForm").addEventListener("submit", searchLocation);

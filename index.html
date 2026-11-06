@@ -65,6 +65,14 @@
               <span class="button-label">Check waypoint winds</span>
               <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h12m0 0-5-5m5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
+            <button id="weatherForecastButton" class="weather-forecast-button" type="button" disabled title="Open an hourly weather briefing for takeoff and drop points">
+              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M5.2 12.3a3.2 3.2 0 0 1 .2-6.4 4.7 4.7 0 0 1 8.9 1.3 2.7 2.7 0 0 1 .5 5.3M7 14.5l-.6 1.4m4.1-1.4-.6 1.4m4.1-1.4-.6 1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              <span>Weather forecast</span>
+            </button>
+            <button id="elevationProfileButton" class="weather-forecast-button elevation-profile-button" type="button" disabled title="View planned altitude and terrain along the route">
+              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m2.5 15 4.2-5.1 2.8 3.2 3.2-5.4 4.8 7.3M2.5 17.5h15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span>Elevation profile</span>
+            </button>
             <div class="wind-check-timer" role="timer" aria-label="Time since the last successful wind check">
               <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M10 6v4l2.5 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
               <span>Since last wind check</span>
@@ -168,6 +176,36 @@
         </div>
       </aside>
 
+      <dialog id="weatherForecastDialog" class="weather-dialog" aria-labelledby="weatherForecastTitle">
+        <header class="weather-dialog-header">
+          <div>
+            <span class="weather-dialog-kicker">MISSION WEATHER</span>
+            <h2 id="weatherForecastTitle">Route weather forecast</h2>
+          </div>
+          <form method="dialog">
+            <button class="weather-dialog-close" type="submit" aria-label="Close weather forecast">×</button>
+          </form>
+        </header>
+        <p class="weather-dialog-intro">Hourly conditions at takeoff, drop points, and the final destination. Rain probability and precipitation amounts cover the preceding hour; wind is shown at each waypoint’s planned altitude.</p>
+        <div id="weatherForecastCards" class="weather-forecast-cards" aria-live="polite"></div>
+        <p class="weather-dialog-note">Weather data: <a href="https://open-meteo.com/en/docs" target="_blank" rel="noreferrer">Open-Meteo</a>. Forecasts can change and may not show local hazards. Check official aviation weather and your aircraft’s operating limits before flight.</p>
+      </dialog>
+
+      <dialog id="elevationProfileDialog" class="weather-dialog elevation-dialog" aria-labelledby="elevationProfileTitle">
+        <header class="weather-dialog-header">
+          <div>
+            <span class="weather-dialog-kicker">ROUTE CHECK</span>
+            <h2 id="elevationProfileTitle">Flight elevation profile</h2>
+          </div>
+          <form method="dialog">
+            <button class="weather-dialog-close" type="submit" aria-label="Close elevation profile">×</button>
+          </form>
+        </header>
+        <p class="weather-dialog-intro">Compare planned flight altitude with terrain elevation along the route.</p>
+        <div id="elevationProfileContent" class="elevation-profile-content" aria-live="polite"></div>
+        <p class="weather-dialog-note">Terrain is sampled at mission waypoints; lines between points are interpolated. This profile does not detect terrain or obstacles between waypoints.</p>
+      </dialog>
+
       <main class="workspace-area">
         <section class="print-report-cover print-only-report" aria-labelledby="printReportTitle">
           <header class="print-report-header">
@@ -204,7 +242,7 @@
             </form>
             <div class="map-tools">
               <div class="map-legend"><span class="legend-line"></span> Mission route <span class="legend-wind">↗</span> Wind flow</div>
-              <label class="map-follow-control" title="Keep the map centered on the estimated drone position">
+              <label class="map-follow-control" title="Keep the map centered on the real drone position; follow the estimate until a pass is recorded">
                 <input id="followDrone" type="checkbox" disabled>
                 <span class="follow-radio" aria-hidden="true"></span>
                 <span>Follow drone</span>

@@ -212,6 +212,56 @@ button { color: inherit; }
 .primary-button:hover:not(:disabled) { background: var(--green-dark); transform: translateY(-1px); }
 .primary-button:disabled { background: #b5c8c2; box-shadow: none; cursor: not-allowed; }
 .primary-button svg { width: 16px; height: 16px; }
+.weather-forecast-button { display: flex; width: 100%; height: 34px; align-items: center; justify-content: center; gap: 7px; margin-top: 8px; color: var(--green-dark); background: var(--green-soft); border: 1px solid var(--line); border-radius: 7px; font-size: 10px; font-weight: 700; cursor: pointer; transition: background .15s, border-color .15s; }
+.weather-forecast-button:hover:not(:disabled) { background: #dff2ea; border-color: #bfdfd2; }
+.weather-forecast-button:disabled { color: #9aa6b1; cursor: not-allowed; }
+.weather-forecast-button svg { width: 17px; height: 17px; }
+.weather-dialog { width: min(880px, calc(100vw - 32px)); max-height: min(88vh, 900px); margin: auto; padding: 22px; overflow: auto; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 22px 70px rgb(13 25 39 / 28%); }
+.weather-dialog::backdrop { background: rgb(10 18 28 / 58%); backdrop-filter: blur(2px); }
+.weather-dialog-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.weather-dialog-header form { margin: 0; }
+.weather-dialog-kicker { color: var(--green-dark); font-size: 9px; font-weight: 800; letter-spacing: 1px; }
+.weather-dialog-header h2 { margin: 4px 0 0; color: var(--ink); font: 800 21px "Manrope", sans-serif; }
+.weather-dialog-close { display: grid; width: 32px; height: 32px; place-items: center; color: var(--muted); background: var(--canvas); border: 1px solid var(--line); border-radius: 8px; font-size: 22px; line-height: 1; cursor: pointer; }
+.weather-dialog-intro, .weather-dialog-note { margin: 10px 0 16px; color: var(--muted); font-size: 11px; line-height: 1.55; }
+.weather-forecast-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 310px), 1fr)); gap: 12px; }
+.weather-point-card { min-width: 0; padding: 13px; background: var(--canvas); border: 1px solid var(--line); border-radius: 10px; }
+.weather-point-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 11px; }
+.weather-point-label { color: var(--green-dark); font-size: 8px; font-weight: 800; letter-spacing: .7px; text-transform: uppercase; }
+.weather-point-header h3 { margin: 3px 0 2px; color: var(--ink); font-size: 13px; font-weight: 800; }
+.weather-point-header p { margin: 0; color: var(--muted); font-size: 9px; }
+.weather-condition { max-width: 46%; padding: 5px 7px; color: var(--green-dark); background: var(--green-soft); border-radius: 7px; font-size: 9px; line-height: 1.35; text-align: right; }
+.weather-point-card--storm .weather-condition { color: #a13d47; background: #fff1f1; }
+.weather-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 0; }
+.weather-metric { min-width: 0; padding: 7px 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 7px; }
+.weather-metric dt { color: var(--muted); font-size: 8px; line-height: 1.3; }
+.weather-metric dd { margin: 3px 0 0; color: var(--ink); font-size: 10px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.35; overflow-wrap: anywhere; }
+.weather-sample-time { margin: 9px 0 0; color: var(--muted); font-size: 8px; }
+.weather-forecast-state { grid-column: 1 / -1; margin: 0; padding: 24px 14px; color: var(--muted); background: var(--canvas); border: 1px dashed var(--line); border-radius: 9px; font-size: 11px; text-align: center; }
+.weather-dialog-note { margin: 14px 0 0; padding-top: 11px; border-top: 1px solid var(--line); }
+.weather-dialog-note a { color: var(--green-dark); font-weight: 700; }
+.elevation-profile-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 8px; margin-bottom: 13px; }
+.elevation-summary-card { display: flex; min-width: 0; flex-direction: column; gap: 5px; padding: 10px; background: var(--canvas); border: 1px solid var(--line); border-radius: 8px; }
+.elevation-summary-card span { color: var(--muted); font-size: 8px; }
+.elevation-summary-card strong { color: var(--ink); font-size: 12px; font-variant-numeric: tabular-nums; }
+.elevation-profile-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 0 0 9px; color: var(--muted); font-size: 9px; }
+.elevation-profile-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.elevation-profile-legend i { display: inline-block; width: 18px; height: 0; border-top: 3px solid var(--green-dark); }
+.elevation-profile-legend .elevation-legend-terrain { border-top: 3px dashed #8294a4; }
+.elevation-profile-legend .elevation-legend-drop { width: 9px; height: 9px; background: #f2c94c; border: 1px solid #8d711e; border-radius: 50%; }
+.elevation-chart-wrap { overflow-x: auto; background: var(--canvas); border: 1px solid var(--line); border-radius: 9px; }
+.elevation-chart { display: block; width: 100%; min-width: 600px; height: auto; }
+.elevation-grid-line { stroke: var(--line); stroke-dasharray: 3 4; stroke-width: 1; }
+.elevation-axis-line { stroke: var(--muted); stroke-width: 1.2; }
+.elevation-axis-label { fill: var(--muted); font: 9px "DM Sans", sans-serif; }
+.elevation-axis-title { fill: var(--muted); font: 700 10px "DM Sans", sans-serif; }
+.elevation-terrain-line { fill: none; stroke: #8294a4; stroke-dasharray: 6 4; stroke-linejoin: round; stroke-width: 2.5; }
+.elevation-flight-area { fill: var(--green); opacity: .12; }
+.elevation-flight-line { fill: none; stroke: var(--green-dark); stroke-linecap: round; stroke-linejoin: round; stroke-width: 3; }
+.elevation-terrain-dot { fill: var(--surface); stroke: #8294a4; stroke-width: 2; }
+.elevation-waypoint-dot { fill: var(--surface); stroke: var(--green-dark); stroke-width: 2.5; }
+.elevation-waypoint-dot--drop { fill: #f2c94c; stroke: #80651e; }
+.elevation-waypoint-label { fill: var(--ink); font: 800 9px "DM Sans", sans-serif; paint-order: stroke; stroke: var(--canvas); stroke-width: 3px; stroke-linejoin: round; }
 .wind-check-timer { display: flex; align-items: center; justify-content: center; gap: 5px; margin-top: 8px; color: #7f8c9c; font-size: 9px; }
 .wind-check-timer svg { width: 13px; height: 13px; flex: 0 0 13px; }
 .wind-check-timer strong { color: #238d74; font-size: 10px; font-variant-numeric: tabular-nums; letter-spacing: .35px; }
@@ -446,7 +496,7 @@ body.panel-resizing[data-resize-axis="row"], body.panel-resizing[data-resize-axi
 .map-wind-gust { padding-left: 5px; color: #526579; border-left: 1px solid #e4ebe8; }
 .map-drop-label { display: flex; flex-wrap: wrap; gap: 4px; margin-left: 32px; }
 .map-drop-label span { padding: 3px 6px; color: #a45b20; background: rgb(255 255 255 / 96%); border: 1px solid #dfe9e5; border-radius: 5px; box-shadow: 0 2px 8px rgb(36 53 60 / 12%); font-size: 9px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.live-drone-marker { display: flex; width: 176px; height: 54px; align-items: center; gap: 6px; background: transparent; border: 0; }
+.live-drone-marker { display: flex; width: 176px; height: 54px; align-items: center; gap: 6px; background: transparent; border: 0; opacity: .45; }
 .live-drone-symbol { display: grid; width: 36px; height: 36px; flex: 0 0 36px; place-items: center; background: #167f68; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 2px 9px rgb(27 55 48 / 38%); }
 .live-drone-plane { width: 21px; height: 21px; fill: #fff; transition: transform .3s ease; }
 .live-drone-details { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
@@ -454,10 +504,13 @@ body.panel-resizing[data-resize-axis="row"], body.panel-resizing[data-resize-axi
 .live-drone-speeds { color: #34465b; font-variant-numeric: tabular-nums; }
 .live-drone-position { color: #536477; font-variant-numeric: tabular-nums; }
 .live-drone-air-change { padding: 3px 6px; color: #9c5e17; background: #fff0d4; border: 1px solid #efc779; border-radius: 6px; box-shadow: 0 2px 8px rgb(36 53 60 / 15%); font-size: 8px; font-weight: 800; letter-spacing: .2px; white-space: nowrap; }
-.reference-drone-marker { width: 30px; height: 30px; background: transparent; border: 0; opacity: .38; filter: grayscale(1); pointer-events: none; }
-.reference-drone-symbol { display: grid; width: 26px; height: 26px; place-items: center; background: #566575; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 2px 7px rgb(27 38 48 / 45%); }
-.reference-drone-plane { width: 16px; height: 16px; fill: #fff; transition: transform .3s ease; }
-.reference-drone-badge { margin-left: 5px; padding: 4px 6px; color: #3d4d5e; background: rgb(255 255 255 / 96%); border: 1px solid #d4dce2; border-radius: 6px; box-shadow: 0 2px 7px rgb(36 53 60 / 15%); font-size: 8px; font-weight: 800; letter-spacing: .35px; white-space: nowrap; }
+.reference-drone-marker { display: flex; width: 176px; height: 54px; align-items: center; gap: 6px; background: transparent; border: 0; opacity: 1; pointer-events: none; }
+.reference-drone-symbol { display: grid; width: 36px; height: 36px; flex: 0 0 36px; place-items: center; background: #f2c94c; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 2px 9px rgb(27 55 48 / 38%); }
+.reference-drone-plane { width: 21px; height: 21px; fill: #26323c; transition: transform .3s ease; }
+.reference-drone-details { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.reference-drone-badge, .reference-drone-speeds, .reference-drone-position { padding: 3px 6px; color: #176e5c; background: rgb(255 255 255 / 96%); border: 1px solid #cfe7dd; border-radius: 6px; box-shadow: 0 2px 8px rgb(36 53 60 / 15%); font-size: 8px; font-weight: 800; letter-spacing: .3px; white-space: nowrap; }
+.reference-drone-speeds { color: #34465b; font-variant-numeric: tabular-nums; }
+.reference-drone-position { color: #536477; font-variant-numeric: tabular-nums; }
 .leaflet-control-attribution { font-size: 8px !important; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -498,6 +551,9 @@ body.panel-resizing[data-resize-axis="row"], body.panel-resizing[data-resize-axi
 
 @media (max-width: 660px) {
   body { min-width: 360px; }
+  .weather-dialog { width: calc(100vw - 20px); padding: 16px; }
+  .weather-dialog-header h2 { font-size: 18px; }
+  .weather-metrics { gap: 5px; }
   .app-shell { display: flex; height: auto; min-height: 100vh; flex-direction: column; overflow: visible; }
   .sidebar { min-height: 0; max-height: none; box-shadow: 0 4px 20px rgb(29 44 66 / 5%); }
   .brand { height: 63px; flex-basis: 63px; }
@@ -815,7 +871,9 @@ body.panel-resizing[data-resize-axis="row"], body.panel-resizing[data-resize-axi
 :root[data-theme="dark"] .consumption-variance.negative .consumption-percent { color: #f0a3a5; background: #4a2d35; }
 :root[data-theme="dark"] .consumption-variance.positive .consumption-percent { color: #91ddbd; background: #203d35; }
 :root[data-theme="dark"] .consumption-variance.neutral .consumption-percent { color: #bdc9d7; background: #2b3948; }
-:root[data-theme="dark"] .reference-drone-badge { color: #c3cfdb; background: rgb(25 37 51 / 96%); border-color: #405064; }
+:root[data-theme="dark"] .reference-drone-badge,
+:root[data-theme="dark"] .reference-drone-speeds,
+:root[data-theme="dark"] .reference-drone-position { color: #a4ead3; background: rgb(25 37 51 / 96%); border-color: #405f59; }
 :root[data-theme="dark"] .leaflet-control-zoom a {
   color: #e0e9f2;
   background: #1c2837;
@@ -842,6 +900,8 @@ body.panel-resizing[data-resize-axis="row"], body.panel-resizing[data-resize-axi
 :root[data-theme="dark"] .message { color: #b6d6e5; background: #203443; }
 :root[data-theme="dark"] .message.error { color: #f0b5b6; background: #40272d; }
 :root[data-theme="dark"] .primary-button:disabled { background: #40584f; }
+:root[data-theme="dark"] .weather-forecast-button:hover:not(:disabled) { background: #203d35; border-color: #355749; }
+:root[data-theme="dark"] .weather-point-card--storm .weather-condition { color: #f0a3a5; background: #4a2d35; }
 :root[data-theme="dark"] .wind-check-timer { color: #a4b2c4; }
 :root[data-theme="dark"] .wind-check-timer strong { color: #91ddbd; }
 
